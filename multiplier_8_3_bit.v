@@ -8,6 +8,6 @@ module multiplier_8_3(output [9:0] o,input [7:0]a,input [2:0]b);
 
     wire [9:0] inter1;//intermediates
     wire c1,c2;//carry_inter
-    full_adder_10 adder_1(.sum(inter1),.carry(c1),.a(m0),.b(m1),.cin(1'b0));//10 bit adders
-    full_adder_10 adder_2(.sum(o),.carry(c2),.a(m2),.b(inter1),.cin(1'b0));
+    ripple_carry_adder #(.N(10)) adder_1(.sum(inter1),.carry(c1),.a(m0),.b(m1),.cin(1'b0));//10 bit adders
+    ripple_carry_adder #(.N(10)) adder_2(.sum(o),.carry(c2),.a(m2),.b(inter1),.cin(1'b0));
 endmodule

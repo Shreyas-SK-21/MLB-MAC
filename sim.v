@@ -1,3 +1,5 @@
+// have to change testbench based on updated adders and xnorP maybe
+
 `timescale 1ns/1ps
 
 module tb_MLB_4;
