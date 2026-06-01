@@ -47,9 +47,13 @@ module xnor_popcount #(parameter N = 4)(
                 if (2*j+1 < ((N + (1<<lvl) - 1) >> lvl)) begin : add_pair
                     assign partial[(lvl+1)*N + j] =
                         partial[lvl*N + 2*j] + partial[lvl*N + 2*j+1];
-                end else if (2*j < ((N + (1<<lvl) - 1) >> lvl)) begin : passthrough
+                end 
+
+                else if (2*j < ((N + (1<<lvl) - 1) >> lvl)) begin : passthrough
                     assign partial[(lvl+1)*N + j] = partial[lvl*N + 2*j];
-                end else begin : zero_fill
+                end 
+                
+                else begin : zero_fill
                     assign partial[(lvl+1)*N + j] = {WIDTH{1'b0}};
                 end
             end
