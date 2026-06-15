@@ -47,6 +47,7 @@ from resnet20 import (
     build_fp32_resnet20,
     build_uniform_mlb_resnet20,
     build_mixed_precision_resnet20,
+    build_hierarchical_resnet20,
 )
 from quantization import apply_ptq, set_qat_mode
 from utils import (
@@ -73,11 +74,13 @@ def build_model(cfg: Config) -> nn.Module:
     """
     Instantiate the appropriate ResNet-20 variant for the given mode.
 
-    Mode A → FP32
-    Mode B → Uniform MLB (PTQ, so qat=False at build time)
-    Mode C → Uniform MLB (QAT enabled)
-    Mode D → Mixed-precision MLB (PTQ)
-    Mode E → Mixed-precision MLB (QAT enabled)
+    Mode A -> FP32
+    Mode B -> Uniform MLB PTQ
+    Mode C -> Uniform MLB QAT
+    Mode D -> Mixed-precision MLB PTQ
+    Mode E -> Mixed-precision MLB QAT
+    Mode F -> Hierarchical M=8 MLB PTQ
+    Mode G -> Hierarchical M=8 MLB QAT
     """
     mode = cfg.mode
     if mode == ExperimentMode.A:
@@ -88,9 +91,15 @@ def build_model(cfg: Config) -> nn.Module:
             qat=mode.is_qat,
             num_classes=cfg.num_classes,
         )
-    else:  # D or E
+    elif mode in (ExperimentMode.D, ExperimentMode.E):
         return build_mixed_precision_resnet20(
             mixed_precision_config=cfg.mixed_precision_config,
+            qat=mode.is_qat,
+            num_classes=cfg.num_classes,
+        )
+    else:  # F or G -- hierarchical M=8
+        return build_hierarchical_resnet20(
+            M_per_stage=4,
             qat=mode.is_qat,
             num_classes=cfg.num_classes,
         )
@@ -441,10 +450,10 @@ def train(cfg: Config, logger=None):
         model.load_state_dict(best_ckpt["model_state"])
 
     # ------------------------------------------------------------------
-    # Post-Training Quantization (PTQ modes B and D)
+    # Post-Training Quantization (PTQ modes B, D, F)
     # ------------------------------------------------------------------
-    if cfg.mode in (ExperimentMode.B, ExperimentMode.D):
-        logger.info("Applying post-training MLB quantization …")
+    if cfg.mode in (ExperimentMode.B, ExperimentMode.D, ExperimentMode.F):
+        logger.info("Applying post-training MLB quantization ...")
         layer_ptq_info = apply_ptq(model)
         logger.info(f"  Quantized {len(layer_ptq_info)} MLB layers.")
     else:

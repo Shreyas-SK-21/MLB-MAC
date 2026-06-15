@@ -3,19 +3,22 @@ config.py
 =========
 Central configuration for all MLB-quantization experiments.
 
-Usage
------
-Modify the variables below or import and override them in your own script.
-All other modules import from this file, so changing a value here propagates
-everywhere.
-
 Experiment Modes
 ----------------
-    A  –  FP32 baseline (no quantization)
-    B  –  Uniform MLB, inference-only  (PTQ)
-    C  –  Uniform MLB, QAT
-    D  –  Mixed-precision MLB, inference-only  (PTQ)
-    E  –  Mixed-precision MLB, QAT
+    A  --  FP32 baseline (no quantization)
+    B  --  Uniform MLB, inference-only  (PTQ)
+    C  --  Uniform MLB, QAT
+    D  --  Mixed-precision MLB, inference-only  (PTQ)
+    E  --  Mixed-precision MLB, QAT
+    F  --  Hierarchical M=8 MLB, inference-only (PTQ)
+    G  --  Hierarchical M=8 MLB, QAT
+
+Change log
+----------
+v2: Updated default mixed-precision allocation to sensitivity-guided
+    ordering (deeper layers get higher M).
+    Added Modes F and G for hierarchical M=8.
+    Added timestamped per-run result directories.
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 from dataclasses import dataclass, asdict, field
 from enum import Enum
 from typing import Dict, Optional
@@ -33,12 +37,14 @@ from typing import Dict, Optional
 # ===========================================================================
 
 class ExperimentMode(str, Enum):
-    """The five experiment modes supported by the framework."""
+    """The seven experiment modes supported by the framework."""
     A = "A"   # FP32 baseline
-    B = "B"   # Uniform MLB PTQ (inference-only quantization)
+    B = "B"   # Uniform MLB PTQ
     C = "C"   # Uniform MLB QAT
-    D = "D"   # Mixed-precision MLB PTQ (inference-only quantization)
+    D = "D"   # Mixed-precision MLB PTQ
     E = "E"   # Mixed-precision MLB QAT
+    F = "F"   # Hierarchical M=8 MLB PTQ
+    G = "G"   # Hierarchical M=8 MLB QAT
 
     @property
     def is_quantized(self) -> bool:
@@ -46,20 +52,27 @@ class ExperimentMode(str, Enum):
 
     @property
     def is_qat(self) -> bool:
-        return self in (ExperimentMode.C, ExperimentMode.E)
+        return self in (ExperimentMode.C, ExperimentMode.E, ExperimentMode.G)
 
     @property
     def is_mixed_precision(self) -> bool:
         return self in (ExperimentMode.D, ExperimentMode.E)
 
     @property
+    def is_hierarchical(self) -> bool:
+        """True for modes that use hierarchical M=8 decomposition."""
+        return self in (ExperimentMode.F, ExperimentMode.G)
+
+    @property
     def description(self) -> str:
         _desc = {
             "A": "FP32 Baseline",
-            "B": "Uniform MLB — Inference-Only (PTQ)",
-            "C": "Uniform MLB — Quantization-Aware Training (QAT)",
-            "D": "Mixed-Precision MLB — Inference-Only (PTQ)",
-            "E": "Mixed-Precision MLB — Quantization-Aware Training (QAT)",
+            "B": "Uniform MLB -- Inference-Only (PTQ)",
+            "C": "Uniform MLB -- Quantization-Aware Training (QAT)",
+            "D": "Mixed-Precision MLB -- Inference-Only (PTQ)",
+            "E": "Mixed-Precision MLB -- Quantization-Aware Training (QAT)",
+            "F": "Hierarchical M=8 MLB -- Inference-Only (PTQ)",
+            "G": "Hierarchical M=8 MLB -- Quantization-Aware Training (QAT)",
         }
         return _desc[self.value]
 
@@ -68,14 +81,17 @@ class ExperimentMode(str, Enum):
 # Mixed-precision per-layer M allocation
 # ===========================================================================
 
-# Default mixed-precision allocation (groups correspond to ResNet-20 groups).
-# Each value specifies the number of binary levels M for that group.
+# Sensitivity-guided allocation:
+# Earlier layers (conv1, layer1) are less sensitive to quantization and get
+# lower M; deeper layers (layer3, fc) are more sensitive and get higher M.
+# This is the REVERSE of the naive ordering and is the empirically better
+# choice validated by layer-wise quantization-error analysis.
 DEFAULT_MIXED_PRECISION_CONFIG: Dict[str, int] = {
-    "conv1":  5,
-    "layer1": 5,
+    "conv1":  2,
+    "layer1": 3,
     "layer2": 4,
-    "layer3": 3,
-    "fc":     2,
+    "layer3": 5,
+    "fc":     5,
 }
 
 
@@ -96,7 +112,7 @@ class Config:
     # -----------------------------------------------------------------------
     data_dir: str = "./data"
     batch_size: int = 128
-    val_split: float = 0.2          # fraction of train set used for validation
+    val_split: float = 0.2
     num_workers: int = 2
     pin_memory: bool = True
 
@@ -120,33 +136,47 @@ class Config:
     # -----------------------------------------------------------------------
     # Training
     # -----------------------------------------------------------------------
-    optimizer: str = "adam"         # "adam" | "sgd"
+    optimizer: str = "adam"
     learning_rate: float = 1e-3
     weight_decay: float = 1e-4
-    momentum: float = 0.9           # for SGD
+    momentum: float = 0.9
     num_epochs: int = 100
 
     # LR scheduler
-    scheduler: str = "cosine"       # "cosine" | "step" | "plateau" | "none"
-    lr_step_size: int = 30          # for StepLR
-    lr_gamma: float = 0.1           # for StepLR
-    lr_min: float = 1e-6            # for CosineAnnealingLR
+    scheduler: str = "cosine"
+    lr_step_size: int = 30
+    lr_gamma: float = 0.1
+    lr_min: float = 1e-6
 
     # Early stopping
     early_stopping: bool = True
-    patience: int = 15              # epochs without improvement before stopping
-    min_delta: float = 1e-4         # minimum improvement threshold
+    patience: int = 15
+    min_delta: float = 1e-4
 
     # -----------------------------------------------------------------------
     # Checkpointing & resumption
     # -----------------------------------------------------------------------
     resume: bool = False
-    resume_checkpoint: str = ""     # path to checkpoint file to resume from
+    resume_checkpoint: str = ""
 
     # -----------------------------------------------------------------------
     # Output directories
     # -----------------------------------------------------------------------
-    results_dir: str = "./results"
+    # Base results root.  Each run automatically creates a timestamped subdir
+    # under this root so no two runs ever overwrite each other.
+    results_root: str = "./results"
+
+    # Timestamped directory for this specific run (auto-set in __post_init__)
+    results_dir: str = ""
+
+    def __post_init__(self):
+        # Auto-create a unique timestamped directory for this run if not set.
+        if not self.results_dir:
+            ts = time.strftime("%Y-%m-%d_%H-%M-%S")
+            self.results_dir = os.path.join(
+                self.results_root,
+                f"{ts}_{self.experiment_name}",
+            )
 
     @property
     def checkpoints_dir(self) -> str:
@@ -164,6 +194,11 @@ class Config:
     def metrics_dir(self) -> str:
         return os.path.join(self.results_dir, "metrics")
 
+    @property
+    def comparison_runs_dir(self) -> str:
+        """Shared directory for aggregate comparison CSVs."""
+        return os.path.join(self.results_root, "comparison_runs")
+
     # -----------------------------------------------------------------------
     # Reproducibility
     # -----------------------------------------------------------------------
@@ -172,7 +207,7 @@ class Config:
     # -----------------------------------------------------------------------
     # Device
     # -----------------------------------------------------------------------
-    device: str = "auto"            # "auto" | "cpu" | "cuda" | "mps"
+    device: str = "auto"
 
     # -----------------------------------------------------------------------
     # Computed helpers
@@ -183,7 +218,6 @@ class Config:
         if self.device == "auto":
             if __import__("torch").cuda.is_available():
                 return "cuda"
-            # MPS (Apple Silicon) — optional
             try:
                 if __import__("torch").backends.mps.is_available():
                     return "mps"
@@ -207,6 +241,7 @@ class Config:
     def from_dict(cls, d: dict) -> "Config":
         d = dict(d)
         d["mode"] = ExperimentMode(d["mode"])
+        # results_dir is already set in the dict; skip __post_init__ re-generation
         return cls(**d)
 
     @classmethod
@@ -231,26 +266,30 @@ def parse_args(argv=None) -> Config:
     python train.py --mode C --M 4 --epochs 80
     python train.py --mode D
     python train.py --mode E --lr 5e-4 --batch-size 64
+    python train.py --mode F
+    python train.py --mode G --epochs 100
     """
     parser = argparse.ArgumentParser(
-        description="MLB Quantization Research Framework – ResNet-20 / Fashion-MNIST"
+        description="MLB Quantization Research Framework -- ResNet-20 / Fashion-MNIST"
     )
 
     # Experiment
     parser.add_argument(
         "--mode", type=str, default="A",
-        choices=["A", "B", "C", "D", "E"],
+        choices=["A", "B", "C", "D", "E", "F", "G"],
         help=(
             "Experiment mode: "
             "A=FP32, "
             "B=Uniform-MLB-PTQ, "
             "C=Uniform-MLB-QAT, "
             "D=Mixed-MLB-PTQ, "
-            "E=Mixed-MLB-QAT"
+            "E=Mixed-MLB-QAT, "
+            "F=Hierarchical-M8-PTQ, "
+            "G=Hierarchical-M8-QAT"
         ),
     )
     parser.add_argument("--name", type=str, default="mlb_experiment",
-                        help="Experiment name (used for naming output files).")
+                        help="Experiment name (used for naming output dirs/files).")
 
     # Dataset
     parser.add_argument("--data-dir", type=str, default="./data")
@@ -260,14 +299,14 @@ def parse_args(argv=None) -> Config:
 
     # Uniform MLB
     parser.add_argument("--M", type=int, default=4,
-                        help="Number of binary levels for uniform MLB (modes B/C).")
+                        help="Uniform binary levels for modes B/C.")
 
-    # Mixed-precision MLB  (JSON string or path)
+    # Mixed-precision MLB (JSON string or path)
     parser.add_argument(
         "--mp-config", type=str, default=None,
         help=(
             'Mixed-precision config as a JSON string, e.g. '
-            '\'{"conv1":5,"layer1":5,"layer2":4,"layer3":3,"fc":2}\''
+            '\'{"conv1":2,"layer1":3,"layer2":4,"layer3":5,"fc":5}\''
             ' or a path to a JSON file.'
         ),
     )
@@ -298,7 +337,8 @@ def parse_args(argv=None) -> Config:
     parser.add_argument("--resume-checkpoint", type=str, default="")
 
     # Output
-    parser.add_argument("--results-dir", type=str, default="./results")
+    parser.add_argument("--results-root", type=str, default="./results",
+                        help="Root directory under which timestamped run dirs are created.")
 
     # Reproducibility
     parser.add_argument("--seed", type=int, default=42)
@@ -318,12 +358,14 @@ def parse_args(argv=None) -> Config:
         if raw.startswith("{"):
             mp_config = json.loads(raw)
         else:
-            # Treat as file path
             with open(raw) as f:
                 mp_config = json.load(f)
 
+    # Derive experiment_name from mode if using default name
+    exp_name = args.name if args.name != "mlb_experiment" else f"mode_{args.mode}"
+
     cfg = Config(
-        experiment_name=args.name,
+        experiment_name=exp_name,
         mode=ExperimentMode(args.mode),
         data_dir=args.data_dir,
         batch_size=args.batch_size,
@@ -345,7 +387,7 @@ def parse_args(argv=None) -> Config:
         min_delta=args.min_delta,
         resume=args.resume,
         resume_checkpoint=args.resume_checkpoint,
-        results_dir=args.results_dir,
+        results_root=args.results_root,
         seed=args.seed,
         device=args.device,
     )

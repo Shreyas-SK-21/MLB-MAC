@@ -40,10 +40,16 @@ from evaluate import measure_inference_time
 from quantization import (
     MLBConv2d,
     MLBLinear,
+    HierarchicalMLBConv2d,
+    HierarchicalMLBLinear,
     mlb_decompose,
     mlb_reconstruct,
     quantization_error,
+    _ALL_MLB_TYPES,
 )
+
+# Convenience alias for layer iteration
+_HIER_TYPES = (HierarchicalMLBConv2d, HierarchicalMLBLinear)
 
 
 # ===========================================================================
@@ -51,9 +57,9 @@ from quantization import (
 # ===========================================================================
 
 def _get_mlb_layers(model: nn.Module):
-    """Yield (name, module) for all MLBConv2d / MLBLinear layers."""
+    """Yield (name, module) for all quantized layers (standard + hierarchical)."""
     for name, module in model.named_modules():
-        if isinstance(module, (MLBConv2d, MLBLinear)):
+        if isinstance(module, _ALL_MLB_TYPES):
             yield name, module
 
 
@@ -102,34 +108,39 @@ def compute_compression_ratio(model: nn.Module) -> float:
     return 32.0 / m_avg
 
 
+def compute_per_layer_quantization_errors(
+    model: nn.Module,
+    layer_ptq_info: Optional[Dict[str, Dict]] = None,
+) -> Dict[str, float]:
+    """
+    Return a dict mapping layer name -> quantization error (Frobenius norm)
+    for every quantized layer.
+    """
+    errors: Dict[str, float] = {}
+    for name, module in _get_mlb_layers(model):
+        if layer_ptq_info and name in layer_ptq_info:
+            errors[name] = layer_ptq_info[name].get("quantization_error", 0.0)
+        else:
+            with torch.no_grad():
+                W = module.weight.data.float()
+                if isinstance(module, _HIER_TYPES):
+                    from quantization import hierarchical_mlb_decompose
+                    _, _, W_q = hierarchical_mlb_decompose(W, module.M_per_stage)
+                else:
+                    alphas, bases = mlb_decompose(W, module.M)
+                    W_q = mlb_reconstruct(alphas, bases)
+                errors[name] = quantization_error(W, W_q).item()
+    return errors
+
+
 def compute_total_quantization_error(
     model: nn.Module,
     layer_ptq_info: Optional[Dict[str, Dict]] = None,
 ) -> float:
     """
-    ‖W − W_MLB‖_F  summed over all MLB layers.
-
-    For QAT models where PTQ info is not stored, we recompute on the fly
-    using the current (latent) weight tensors.
-
-    Parameters
-    ----------
-    model          : the model
-    layer_ptq_info : dict returned by apply_ptq() (may be empty for QAT)
+    ||W - W_MLB||_F  summed over all quantized layers.
     """
-    total_error = 0.0
-    for name, module in _get_mlb_layers(model):
-        if layer_ptq_info and name in layer_ptq_info:
-            # PTQ path: error was recorded during quantization
-            total_error += layer_ptq_info[name].get("quantization_error", 0.0)
-        else:
-            # QAT / fresh computation path
-            with torch.no_grad():
-                W = module.weight.data.float()
-                alphas, bases = mlb_decompose(W, module.M)
-                W_mlb = mlb_reconstruct(alphas, bases)
-                total_error += quantization_error(W, W_mlb).item()
-    return total_error
+    return sum(compute_per_layer_quantization_errors(model, layer_ptq_info).values())
 
 
 def compute_binary_op_count(model: nn.Module) -> int:
@@ -291,17 +302,50 @@ def compute_all_metrics(
     total_bases = compute_total_binary_bases(model)
     metrics["total_binary_bases"] = total_bases
 
-    # 12. Quantization error ‖W − W_MLB‖_F
-    q_err = compute_total_quantization_error(model, layer_ptq_info)
+    # 12. Quantization error ||W - W_MLB||_F
+    per_layer_errors = compute_per_layer_quantization_errors(model, layer_ptq_info)
+    q_err = sum(per_layer_errors.values())
     metrics["quantization_error_frobenius"] = q_err
+
+    # New: per-layer stats
+    if per_layer_errors:
+        metrics["average_quantization_error"] = q_err / len(per_layer_errors)
+        metrics["max_layer_quantization_error"] = max(per_layer_errors.values())
+        metrics["min_layer_quantization_error"] = min(per_layer_errors.values())
+    else:
+        metrics["average_quantization_error"] = 0.0
+        metrics["max_layer_quantization_error"] = 0.0
+        metrics["min_layer_quantization_error"] = 0.0
+
+    # New: effective_M (alias for effective_avg_M for CSV readability)
+    metrics["effective_M"] = m_avg
+
+    # Hierarchical-specific metrics (stage1/stage2/combined errors)
+    if cfg.mode.is_hierarchical:
+        stage1_errors, stage2_errors = [], []
+        for name, module in model.named_modules():
+            if isinstance(module, _HIER_TYPES):
+                if layer_ptq_info and name in layer_ptq_info:
+                    stage1_errors.append(layer_ptq_info[name].get("stage1_error", 0.0))
+                    stage2_errors.append(layer_ptq_info[name].get("stage2_error", 0.0))
+                elif module._stage1_info is not None:
+                    stage1_errors.append(module._stage1_info.get("error", 0.0))
+                    stage2_errors.append(module._stage2_info.get("error", 0.0))
+        metrics["stage1_error"]   = sum(stage1_errors)
+        metrics["stage2_error"]   = sum(stage2_errors)
+        metrics["combined_error"] = q_err
+    else:
+        metrics["stage1_error"]   = "N/A"
+        metrics["stage2_error"]   = "N/A"
+        metrics["combined_error"] = "N/A"
 
     # 13. Accuracy drop relative to FP32 baseline
     if fp32_baseline_accuracy is not None:
         acc_drop = fp32_baseline_accuracy - val_acc_final
     elif cfg.mode == ExperimentMode.A:
-        acc_drop = 0.0   # this IS the FP32 baseline
+        acc_drop = 0.0
     else:
-        acc_drop = None  # unknown; record N/A
+        acc_drop = None
     metrics["accuracy_drop_vs_fp32"] = acc_drop
 
     # Additional metadata
@@ -309,7 +353,10 @@ def compute_all_metrics(
     metrics["mode"]             = cfg.mode.value
     metrics["mode_description"] = cfg.mode.description
     metrics["seed"]             = cfg.seed
-    metrics["M"]                = cfg.M if not cfg.mode.is_mixed_precision else "mixed"
+    metrics["M"] = (
+        cfg.M if not (cfg.mode.is_mixed_precision or cfg.mode.is_hierarchical)
+        else ("mixed" if cfg.mode.is_mixed_precision else "hierarchical_8")
+    )
 
     _log(f"  Metrics summary:")
     _log(f"    val_acc          = {val_acc_final * 100:.2f}%")
@@ -343,8 +390,10 @@ def save_experiment_summary(metrics: Dict[str, Any], path: str):
         "mode_description",
         "seed",
         "M",
+        "effective_M",
         "final_val_accuracy",
         "final_val_loss",
+        "accuracy_drop_vs_fp32",
         "training_time_seconds",
         "inference_time_ms_per_image",
         "total_parameters",
@@ -355,7 +404,12 @@ def save_experiment_summary(metrics: Dict[str, Any], path: str):
         "estimated_mac_reduction",
         "total_binary_bases",
         "quantization_error_frobenius",
-        "accuracy_drop_vs_fp32",
+        "average_quantization_error",
+        "max_layer_quantization_error",
+        "min_layer_quantization_error",
+        "stage1_error",
+        "stage2_error",
+        "combined_error",
     ]
 
     file_exists = os.path.isfile(path) and os.path.getsize(path) > 0
@@ -412,12 +466,15 @@ def save_layer_report(
         if layer_ptq_info and name in layer_ptq_info:
             q_err = layer_ptq_info[name].get("quantization_error", 0.0)
         else:
-            # Compute on-the-fly for QAT or FP32-equivalent checks
             with torch.no_grad():
                 W = module.weight.data.float()
-                alphas, bases = mlb_decompose(W, M)
-                W_mlb = mlb_reconstruct(alphas, bases)
-                q_err = quantization_error(W, W_mlb).item()
+                if isinstance(module, _HIER_TYPES):
+                    from quantization import hierarchical_mlb_decompose
+                    _, _, W_q = hierarchical_mlb_decompose(W, module.M_per_stage)
+                else:
+                    alphas, bases = mlb_decompose(W, M)
+                    W_q = mlb_reconstruct(alphas, bases)
+                q_err = quantization_error(W, W_q).item()
 
         # Compression ratio for this layer: 32 bits (FP32) / M bits (binary)
         cr = 32.0 / M if M > 0 else 1.0
