@@ -1,0 +1,2 @@
+experiment_name,mode,mode_description,seed,M,final_val_accuracy,final_val_loss,training_time_seconds,inference_time_ms_per_image,total_parameters,model_size_mb,effective_avg_M,compression_ratio,estimated_binary_op_count,estimated_mac_reduction,total_binary_bases,quantization_error_frobenius,accuracy_drop_vs_fp32
+mode_B,B,Uniform MLB — Inference-Only (PTQ),42,4,0.437833,1.825146,1902.091486,6.894140,272186,1.038307,4.000000,8.000000,896850944,0.968750,80,25.846126,N/A

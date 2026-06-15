@@ -1,0 +1,79 @@
+2026-06-14 01:04:45  INFO      ======================================================================
+2026-06-14 01:04:45  INFO        MLB Quantization Experiment
+2026-06-14 01:04:45  INFO        Mode  : A — FP32 Baseline
+2026-06-14 01:04:45  INFO        Device: cpu
+2026-06-14 01:04:45  INFO        Seed  : 42
+2026-06-14 01:04:45  INFO      ======================================================================
+2026-06-14 01:04:45  INFO      Loading Fashion-MNIST …
+2026-06-14 01:04:53  INFO        Train=48,000  Val=12,000  Test=10,000
+2026-06-14 01:04:53  INFO      Building model (mode=A) …
+2026-06-14 01:04:53  INFO        Parameters: 272,186
+2026-06-14 01:04:53  INFO      Starting training for up to 2 epochs …
+2026-06-14 01:06:36  INFO      Epoch   1/2  train_loss=0.9235  train_acc=0.6523  val_loss=0.5867  val_acc=0.7740  lr=1.00e-03  (95.8s)
+2026-06-14 01:06:49  INFO      ======================================================================
+2026-06-14 01:06:49  INFO        MLB Quantization Experiment
+2026-06-14 01:06:49  INFO        Mode  : A â€” FP32 Baseline
+2026-06-14 01:06:49  INFO        Device: cpu
+2026-06-14 01:06:49  INFO        Seed  : 42
+2026-06-14 01:06:49  INFO      ======================================================================
+2026-06-14 01:06:49  INFO      Loading Fashion-MNIST â€¦
+2026-06-14 01:06:49  INFO        Train=48,000  Val=12,000  Test=10,000
+2026-06-14 01:06:49  INFO      Building model (mode=A) â€¦
+2026-06-14 01:06:49  INFO        Parameters: 272,186
+2026-06-14 01:06:49  INFO      Starting training for up to 2 epochs â€¦
+2026-06-14 01:07:31  DEBUG       Epoch   1  Batch   37/187  [#####-------------------------]  19.8%  loss=1.2847
+2026-06-14 01:08:09  DEBUG       Epoch   1  Batch   74/187  [###########-------------------]  39.6%  loss=0.8249
+2026-06-14 01:08:52  DEBUG       Epoch   1  Batch  111/187  [#################-------------]  59.4%  loss=0.6543
+2026-06-14 01:09:45  DEBUG       Epoch   1  Batch  148/187  [#######################-------]  79.1%  loss=0.5647
+2026-06-14 01:10:07  INFO      Epoch   2/2  train_loss=0.4711  train_acc=0.8221  val_loss=0.4680  val_acc=0.8190  lr=5.01e-04  (198.5s)
+2026-06-14 01:10:07  INFO      Training complete.  Total wall time: 313.7s
+2026-06-14 01:10:07  INFO      Loading best model for final evaluation …
+2026-06-14 01:10:07  INFO      Final evaluation on validation set …
+2026-06-14 01:10:19  INFO        Final val_loss=0.4680  val_acc=0.8190
+2026-06-14 01:10:19  INFO      Computing experiment metrics …
+2026-06-14 01:10:19  INFO        Benchmarking inference latency …
+2026-06-14 01:10:23  INFO        Metrics summary:
+2026-06-14 01:10:23  INFO          val_acc          = 81.90%
+2026-06-14 01:10:23  INFO          inference_lat    = 17.685 ms/image
+2026-06-14 01:10:23  INFO          model_size       = 1.04 MB
+2026-06-14 01:10:23  INFO          avg_M            = 0.00
+2026-06-14 01:10:23  INFO          compression_ratio= 1.00×
+2026-06-14 01:10:23  INFO          quant_error      = 0.0000
+2026-06-14 01:10:23  INFO          acc_drop_vs_fp32 = 0.00%
+2026-06-14 01:10:23  INFO      Generating training plots …
+2026-06-14 01:10:24  DEBUG       Epoch   1  Batch  185/187  [#############################-]  98.9%  loss=0.5031
+2026-06-14 01:10:25  DEBUG       Epoch   1  Batch  187/187  [##############################] 100.0%  loss=0.5664
+2026-06-14 01:10:30  INFO        Plots saved to ./results/smoke\plots
+2026-06-14 01:10:30  INFO      ======================================================================
+2026-06-14 01:10:30  INFO        DONE.  Final val accuracy: 81.90%
+2026-06-14 01:10:30  INFO      ======================================================================
+2026-06-14 01:10:34  INFO      Epoch   1/2  train_loss=0.9235  train_acc=0.6523  val_loss=0.5867  val_acc=0.7740  lr=1.00e-03  (216.5s)
+2026-06-14 01:10:53  DEBUG       Epoch   2  Batch   37/187  [#####-------------------------]  19.8%  loss=0.5386
+2026-06-14 01:11:12  DEBUG       Epoch   2  Batch   74/187  [###########-------------------]  39.6%  loss=0.4522
+2026-06-14 01:11:31  DEBUG       Epoch   2  Batch  111/187  [#################-------------]  59.4%  loss=0.4993
+2026-06-14 01:11:50  DEBUG       Epoch   2  Batch  148/187  [#######################-------]  79.1%  loss=0.5600
+2026-06-14 01:12:09  DEBUG       Epoch   2  Batch  185/187  [#############################-]  98.9%  loss=0.4429
+2026-06-14 01:12:10  DEBUG       Epoch   2  Batch  187/187  [##############################] 100.0%  loss=0.4347
+2026-06-14 01:12:17  INFO      Epoch   2/2  train_loss=0.4711  train_acc=0.8221  val_loss=0.4680  val_acc=0.8190  lr=5.01e-04  (96.4s)
+2026-06-14 01:12:18  INFO      Training complete.  Total wall time: 328.6s
+2026-06-14 01:12:18  INFO      Loading best model for final evaluation â€¦
+2026-06-14 01:12:18  INFO      Final evaluation on validation set â€¦
+2026-06-14 01:12:25  INFO        Final val_loss=0.4680  val_acc=0.8190
+2026-06-14 01:12:25  INFO      Computing experiment metrics â€¦
+2026-06-14 01:12:25  INFO        Benchmarking inference latency â€¦
+2026-06-14 01:12:26  INFO        Metrics summary:
+2026-06-14 01:12:26  INFO          val_acc          = 81.90%
+2026-06-14 01:12:26  INFO          inference_lat    = 2.890 ms/image
+2026-06-14 01:12:26  INFO          model_size       = 1.04 MB
+2026-06-14 01:12:26  INFO          avg_M            = 0.00
+2026-06-14 01:12:26  INFO          compression_ratio= 1.00Ã—
+2026-06-14 01:12:26  INFO          quant_error      = 0.0000
+2026-06-14 01:12:26  INFO          acc_drop_vs_fp32 = 0.00%
+2026-06-14 01:12:26  INFO        Experiment summary â†’ ./results/smoke\metrics\experiment_summary.csv
+2026-06-14 01:12:26  INFO        Layer quantization report â†’ ./results/smoke\metrics\layer_quantization_report.csv
+2026-06-14 01:12:26  INFO      Generating training plots â€¦
+2026-06-14 01:12:27  INFO        Plots saved to ./results/smoke\plots
+2026-06-14 01:12:27  INFO        Run config â†’ ./results/smoke\logs\smoke_test_config.json
+2026-06-14 01:12:27  INFO      ======================================================================
+2026-06-14 01:12:27  INFO        DONE.  Final val accuracy: 81.90%
+2026-06-14 01:12:27  INFO      ======================================================================

@@ -1,0 +1,6 @@
+mode,mode_description,M,effective_avg_M,final_val_accuracy,final_val_loss,training_time_seconds,inference_time_ms_per_image,total_parameters,model_size_mb,compression_ratio,quantization_error_frobenius,accuracy_drop_vs_fp32,estimated_binary_op_count,estimated_mac_reduction,total_binary_bases
+A,FP32 Baseline,4,0.000000,0.920167,0.213294,1637.022984,7.987548,272186,1.038307,1.000000,0.000000,0.000000,0,0.000000,0
+B,Uniform MLB — Inference-Only (PTQ),4,4.000000,0.437833,1.825146,1902.091486,6.894140,272186,1.038307,8.000000,25.846126,0.482333,896850944,0.968750,80
+C,Uniform MLB — Quantization-Aware Training (QAT),4,4.000000,0.923333,0.211374,1700.596131,17.925457,272186,1.038307,8.000000,26.738855,-0.003167,896850944,0.968750,80
+D,Mixed-Precision MLB — Inference-Only (PTQ),mixed,3.290933,0.420167,2.143978,1158.505842,5.215587,272186,1.038307,9.723686,28.348974,0.500000,763405312,0.968750,79
+E,Mixed-Precision MLB — Quantization-Aware Training (QAT),mixed,3.290933,0.920333,0.215561,1264.155354,16.090288,272186,1.038307,9.723686,29.425401,-0.000167,763405312,0.968750,79

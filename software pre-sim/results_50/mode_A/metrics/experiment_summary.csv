@@ -1,0 +1,3 @@
+experiment_name,mode,mode_description,seed,M,final_val_accuracy,final_val_loss,training_time_seconds,inference_time_ms_per_image,total_parameters,model_size_mb,effective_avg_M,compression_ratio,estimated_binary_op_count,estimated_mac_reduction,total_binary_bases,quantization_error_frobenius,accuracy_drop_vs_fp32
+mode_A,A,FP32 Baseline,42,4,0.920167,0.213294,1637.022984,7.987548,272186,1.038307,0,1,0,0,0,0,0
+mode_A,A,FP32 Baseline,42,4,0.941583,0.171480,12482.166396,5.690515,272186,1.038307,0.000000,1.000000,0,0.000000,0,0.000000,0.000000
