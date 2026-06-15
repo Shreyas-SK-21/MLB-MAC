@@ -1,0 +1,12 @@
+# MLB Quantization Research Framework — Requirements
+# Install with: pip install -r requirements.txt
+
+# Core
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Plotting
+matplotlib>=3.7.0
+
+# Numerical utilities (already a torch dep, listed explicitly for clarity)
+numpy>=1.24.0
