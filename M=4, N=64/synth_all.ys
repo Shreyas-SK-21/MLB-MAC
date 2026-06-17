@@ -1,0 +1,19 @@
+# synth_all.ys — ALL designs with IDENTICAL synthesis settings
+# Flow: synth → dfflibmap → abc -liberty → stat -liberty
+# No abc -fast, no shortcuts — same optimization for everything
+
+# ── 1. MLB_4 ──
+design -reset
+read_verilog MLB_MAC_4_bit.v MLB_MAC_unit.v xnor_popcount_4_bit.v basis_multiplier.v
+synth -top MLB_4
+dfflibmap -liberty NangateOpenCellLibrary_typical.lib
+abc -liberty NangateOpenCellLibrary_typical.lib
+tee -o mlb4_area_fair.rpt stat -liberty NangateOpenCellLibrary_typical.lib
+
+# ── 2. int_mac_64 ──
+design -reset
+read_verilog int_mac_64.v
+synth -top int_mac_64
+#dfflibmap -liberty NangateOpenCellLibrary_typical.lib
+abc -liberty NangateOpenCellLibrary_typical.lib
+tee -o intmac_area_fair.rpt stat -liberty NangateOpenCellLibrary_typical.lib
