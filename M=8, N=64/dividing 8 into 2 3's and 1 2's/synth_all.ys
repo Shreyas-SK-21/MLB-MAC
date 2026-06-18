@@ -1,0 +1,27 @@
+# synth_mlb8_332.ys — MLB_8_332 (3-3-2 Split)
+# Flow: synth → dfflibmap → abc -liberty → stat -liberty
+
+# ── 1. MLB_8_332 (3-3-2 Configuration) ──
+design -reset
+
+# Read the new top module, the intermediate routing blocks, and the base logic
+read_verilog MLB_8_332.v \
+             MLB_3.v \
+             MLB_2.v \
+             MLB_3x2.v \
+             MLB_2x3.v \
+             MLB_MAC_unit.v \
+             xnor_popcount_4_bit.v \
+             basis_multiplier.v
+
+# Set hierarchy and synthesize for the new top module
+hierarchy -check -top MLB_8_332
+synth -top MLB_8_332
+
+# Map flip-flops and logic to the Nangate library
+dfflibmap -liberty NangateOpenCellLibrary_typical.lib
+abc -liberty NangateOpenCellLibrary_typical.lib
+
+# Generate area/power statistics and output the synthesized netlist
+tee -o mlb8_332_area.rpt stat -liberty NangateOpenCellLibrary_typical.lib
+write_verilog mlb8_332_synth.v

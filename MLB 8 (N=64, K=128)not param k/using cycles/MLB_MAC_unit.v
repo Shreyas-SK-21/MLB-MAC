@@ -1,0 +1,6 @@
+module MLB_unit(output signed [25:0] out,output done,input [7:0] alpha_x,alpha_w,input [63:0] axi,awi,input clk,rst,valid_in);
+    wire signed [8:0] inter; // intermediates
+    wire xp_done;
+    xnor_popcount_4_bit xp(.signed_output(inter),.done(xp_done),.a(axi),.b(awi),.clk(clk),.rst(rst),.valid_in(valid_in));
+    basis_multiplier bm(.basis_mult(out),.done(done),.xp_done(xp_done),.rst(rst),.clk(clk),.xnor_popcount(inter),.alpha_x(alpha_x),.alpha_w(alpha_w));
+endmodule
