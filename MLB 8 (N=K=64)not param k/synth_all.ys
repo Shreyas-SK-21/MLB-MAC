@@ -1,0 +1,21 @@
+# synth_all.ys — MLB_8 vs int_mac_M8_N64, identical synthesis settings
+# Flow: synth → dfflibmap → abc -liberty → stat -liberty
+# ── 1. MLB_8 ──
+design -reset
+read_verilog MLB_MAC_8_bit.v MLB_MAC_4_bit.v MLB_MAC_unit.v xnor_popcount_4_bit.v basis_multiplier.v
+hierarchy -check -top MLB_8
+synth -top MLB_8
+dfflibmap -liberty NangateOpenCellLibrary_typical.lib
+abc -liberty NangateOpenCellLibrary_typical.lib
+tee -o mlb8_area.rpt stat -liberty NangateOpenCellLibrary_typical.lib
+write_verilog mlb8_synth.v
+
+# ── 2. int_mac_M8_N64 ──
+design -reset
+read_verilog int_mac_M8_N64.v
+hierarchy -check -top int_mac_M8_N64
+synth -top int_mac_M8_N64
+dfflibmap -liberty NangateOpenCellLibrary_typical.lib
+abc -liberty NangateOpenCellLibrary_typical.lib
+tee -o intmac_area.rpt stat -liberty NangateOpenCellLibrary_typical.lib
+write_verilog intmac_synth.v

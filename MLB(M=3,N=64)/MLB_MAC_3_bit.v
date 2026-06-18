@@ -1,0 +1,30 @@
+module MLB_3(output signed [20:0] mlb,input [8:0] alpha_x,alpha_w,input [191:0] axi,awi);
+    genvar i,j;
+    wire signed [14:0] out[2:0][2:0];
+    generate
+        for(i=0; i<3; i=i+1) begin
+            for(j=0; j<3; j=j+1) begin
+                MLB_unit u_ij(.out(out[i][j]),.alpha_x(alpha_x[i*3+2:i*3]),.alpha_w(alpha_w[j*3+2:j*3]),.axi(axi[i*64+63:64*i]),.awi(awi[j*64+63:64*j]));
+            end
+        end
+    endgenerate
+    //reduction tree
+    wire signed [15:0] s00,s01,s02,s03,s04;
+    wire signed [16:0] s10,s11,s12;
+    wire signed [17:0] s20,s21;
+
+    assign s00=out[0][0]+out[0][1];
+    assign s01=out[0][2]+out[1][2];
+    assign s02=out[1][0]+out[1][1];
+    assign s03=out[2][0]+out[2][1];
+    assign s04=out[2][2];
+
+    assign s10=s00+s01;
+    assign s11=s02+s03;
+    assign s12=s04;
+
+    assign s20=s10+s11;
+    assign s21=s12;
+
+    assign mlb=s20+s21;
+endmodule
