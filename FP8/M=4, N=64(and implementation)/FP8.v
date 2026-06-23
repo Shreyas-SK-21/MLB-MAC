@@ -10,7 +10,7 @@ module fp8_mlb_top(output signed [20:0] wide_integer_sum,output [8:0] shared_exp
     genvar i;
     generate
         for (i=0;i<64;i=i+1) begin
-            assign sign_k[i]=fp8_activations[i*8+7]^p8_weights[i*8+7];
+            assign sign_k[i]=fp8_activations[i*8+7]^fp8_weights[i*8+7];
         end
     endgenerate
     wire [63:0] pos_mask = ~sign_k;
