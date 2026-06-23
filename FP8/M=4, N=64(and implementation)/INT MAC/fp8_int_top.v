@@ -5,10 +5,10 @@ module fp8_int_top (
     input  [511:0] fp8_activations,
     input  [511:0] fp8_weights,
     output signed [20:0] wide_integer_sum,
-    output [8:0]   shared_exponent
+    output signed [8:0]   shared_exponent
 );
 
-    // ---------------- BFP alignment (Reused from your MLB design) ----------------
+    // ---------------- BFP alignment (Reused from MLB design) ----------------
     wire [255:0] axi_planes;
     wire [255:0] awi_planes;
     wire [3:0]   max_exp_x;
@@ -26,43 +26,34 @@ module fp8_int_top (
         .max_exp(max_exp_w)
     );
 
-    // ---------------- Format for INT MAC (Plane-to-Flat + Sign Application) ----------------
-    reg signed [3:0] a_flat_reg [0:63];
-    reg signed [3:0] b_flat_reg [0:63];
+    // ---------------- Format for INT MAC (Plane-to-Flat, Sign Separate) ----------------
+    // Mantissas stay UNSIGNED [0..15]. Sign is handled AFTER multiplication inside int_mac_64,
+    // exactly like the FP8 MLB design — avoids the >>1 truncation of the old approach.
+    reg [3:0]  a_flat_reg  [0:63]; // 4-bit unsigned mantissa per lane
+    reg [3:0]  b_flat_reg  [0:63]; // 4-bit unsigned mantissa per lane
+    reg [63:0] sign_flat_reg;      // product sign per lane: sign_x XOR sign_w
+
     wire [255:0] a_flat_wire;
     wire [255:0] b_flat_wire;
 
     integer i;
-    // FIXED: Variables declared outside the always block to satisfy Verilog-2001
-    reg [3:0] mant_x;
-    reg [3:0] mant_w;
-    reg sign_x;
-    reg sign_w;
-    reg [3:0] signed_x;
-    reg [3:0] signed_w;
+    reg [3:0] mant_x, mant_w;
 
     always @(*) begin
         for (i = 0; i < 64; i = i + 1) begin
-            // 1. Reconstruct 4-bit unsigned mantissa from the BFP bit-planes
+            // 1. Reconstruct full 4-bit unsigned mantissa from BFP bit-planes
             mant_x = {axi_planes[192+i], axi_planes[128+i], axi_planes[64+i], axi_planes[i]};
             mant_w = {awi_planes[192+i], awi_planes[128+i], awi_planes[64+i], awi_planes[i]};
 
-            // 2. Extract signs from the original FP8 inputs
-            sign_x = fp8_activations[i*8 + 7];
-            sign_w = fp8_weights[i*8 + 7];
+            a_flat_reg[i] = mant_x;
+            b_flat_reg[i] = mant_w;
 
-            // 3. Shift by 1 to fit in 4-bit signed (max val becomes 7), then apply Two's Complement sign
-            signed_x = mant_x >> 1; 
-            if (sign_x) a_flat_reg[i] = -signed_x;
-            else        a_flat_reg[i] = signed_x;
-
-            signed_w = mant_w >> 1;
-            if (sign_w) b_flat_reg[i] = -signed_w;
-            else        b_flat_reg[i] = signed_w;
+            // 2. Compute product sign (sign-magnitude rule: sign = XOR of input signs)
+            sign_flat_reg[i] = fp8_activations[i*8 + 7] ^ fp8_weights[i*8 + 7];
         end
     end
 
-    // Pack the registers into the flat 256-bit wires required by your int_mac_64 module
+    // Pack mantissa registers into flat buses
     genvar k;
     generate
         for (k = 0; k < 64; k = k + 1) begin : pack_flat
@@ -75,20 +66,20 @@ module fp8_int_top (
     int_mac_64 mac_array (
         .clk(clk),
         .rst(rst),
-        .load(valid_in),         // valid_in acts as the load signal for the accumulators
+        .load(valid_in),
         .a_flat(a_flat_wire),
         .b_flat(b_flat_wire),
-        .alpha_x(4'd1),          // Default scale (can be mapped to actual quantization scales later)
+        .sign_flat(sign_flat_reg),   // per-lane product sign
+        .alpha_x(4'd1),
         .alpha_w(4'd1),
-        .beta_xw(8'sd0),         // Default offset
+        .beta_xw(8'sd0),
         .result(wide_integer_sum)
     );
 
     // ---------------- Final Exponent ----------------
-    // E4M3 bias is 7. Because we shifted mantissas right by 1 (which acts as a divide by 2), 
-    // we must compensate by adding 1 to the exponent for both x and w (total +2).
-    // Original formula: exp_x + exp_w - 14. 
-    // Adjusted formula: exp_x + exp_w - 12.
-    assign shared_exponent = {5'b0, max_exp_x} + {5'b0, max_exp_w} - 9'd12;
+    // No >>1 compensation needed anymore. Full 4-bit mantissas are used (hidden bit at
+    // position 3, so each mantissa integer is 2^3 = 8x the true fraction).
+    // Two mantissas multiplied → 2^6 total scale → same formula as FP8 MLB: bias*2 + 6 = 14+6 = 20
+    assign shared_exponent = $signed({5'b0, max_exp_x}) + $signed({5'b0, max_exp_w}) - 9'sd20;
 
 endmodule

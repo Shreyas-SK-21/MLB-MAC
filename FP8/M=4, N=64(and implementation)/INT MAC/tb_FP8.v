@@ -8,7 +8,7 @@ module tb_fp8_int_top;
     reg  clk, rst, valid_in;
     reg  [511:0] fp8_activations, fp8_weights;
     wire signed [20:0] wide_integer_sum;
-    wire [8:0]   shared_exponent;
+    wire signed [8:0]   shared_exponent;
 
     integer pass_count = 0;
     integer fail_count = 0;
@@ -106,7 +106,7 @@ task pack_vectors;
     endtask
 
     // ------------------------------------------------------------------
-    // Behavioral reference model (UPDATED FOR INT MAC TRUNCATION)
+    // Behavioral reference model (UPDATED: sign-after-multiply, no >>1 truncation)
     // ------------------------------------------------------------------
 task compute_reference(output reg signed [20:0] ref_result,
                            output reg [8:0]         ref_exponent);
@@ -118,7 +118,6 @@ task compute_reference(output reg signed [20:0] ref_result,
         integer shift_x, shift_w;
         reg [3:0] smx, smw;
         
-        integer val_x, val_w; // Signed integers for the MAC simulation
         integer prod;
         integer total_sum;
         begin
@@ -147,20 +146,18 @@ task compute_reference(output reg signed [20:0] ref_result,
                 smx = mx >> shift_x;
                 smw = mw >> shift_w;
 
-                // --- INT MAC SPECIFIC TRUNCATION & SIGNING ---
-                // Shift by 1 to fit in 4-bit signed multiplier
-                val_x = (smx >> 1);
-                if (sx) val_x = -val_x;
-
-                val_w = (smw >> 1);
-                if (sw) val_w = -val_w;
-
-                prod = val_x * val_w;
-                total_sum = total_sum + prod;
+                // Full mantissa magnitude used — no >>1 truncation
+                // Sign applied AFTER product (XOR rule), matching new int_mac_64
+                prod = smx * smw;
+                if (sx ^ sw)
+                    total_sum = total_sum - prod;
+                else
+                    total_sum = total_sum + prod;
             end
 
-            ref_result   = total_sum; // alpha_x=1, alpha_w=1, beta=0
-            ref_exponent = ({5'b0, max_ex} + {5'b0, max_ew}) - 9'd12; // Compensated bias
+            ref_result   = total_sum;
+            // No >>1 compensation: same formula as FP8 MLB (14 bias + 6 mantissa scale = 20)
+            ref_exponent = $signed({5'b0, max_ex}) + $signed({5'b0, max_ew}) - 9'sd20;
         end
     endtask
 

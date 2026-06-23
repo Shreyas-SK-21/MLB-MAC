@@ -8,7 +8,7 @@ module tb_fp8_mlb_top;
     reg  clk, rst, valid_in;
     reg  [511:0] fp8_activations, fp8_weights;
     wire signed [20:0] wide_integer_sum;
-    wire [8:0]   shared_exponent;
+    wire signed [8:0]   shared_exponent;
     wire         mac_done;
 
     integer pass_count = 0;
@@ -166,7 +166,7 @@ task compute_reference(output reg signed [20:0] ref_result,
             end
 
             ref_result   = pos_sum - neg_sum;
-            ref_exponent = ({5'b0, max_ex} + {5'b0, max_ew}) - 9'd14;
+            ref_exponent = $signed({5'b0, max_ex}) + $signed({5'b0, max_ew}) - 9'sd20;
         end
     endtask
 

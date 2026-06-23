@@ -1,4 +1,4 @@
-module fp8_mlb_top(output signed [20:0] wide_integer_sum,output [8:0] shared_exponent,output mac_done,input clk,rst,valid_in,input [511:0] fp8_activations,fp8_weights);
+module fp8_mlb_top(output signed [20:0] wide_integer_sum,output signed [8:0] shared_exponent,output mac_done,input clk,rst,valid_in,input [511:0] fp8_activations,fp8_weights);
     wire [255:0] axi_planes;
     wire [255:0] awi_planes;
     wire [3:0] max_exp_x;
@@ -101,6 +101,6 @@ module fp8_mlb_top(output signed [20:0] wide_integer_sum,output [8:0] shared_exp
 
     assign wide_integer_sum = result_reg;
     assign mac_done         = done_reg;
-    assign shared_exponent  = {5'b0, max_exp_x} + {5'b0, max_exp_w} - 9'd14;
+    assign shared_exponent  = $signed({5'b0, max_exp_x}) + $signed({5'b0, max_exp_w}) - 9'sd20; // 14 (2x E4M3 bias) + 6 (2x hidden-bit integer scale 2^3)
 
 endmodule
