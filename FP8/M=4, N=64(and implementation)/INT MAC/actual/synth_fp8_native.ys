@@ -1,0 +1,22 @@
+# synth_fp8_native.ys — Pure FP8 MAC Array (M=4, N=64)
+# Flow: synth → dfflibmap → abc -liberty → stat -liberty
+
+design -reset
+# Read the standalone native FP8 MAC file
+read_verilog fp8_native_mac_64.v
+
+# Check hierarchy and set the top module
+hierarchy -check -top FP8_NATIVE_MAC_64
+
+# Synthesize the design
+synth -top FP8_NATIVE_MAC_64
+
+# Map to the Nangate 45nm standard cell library
+dfflibmap -liberty NangateOpenCellLibrary_typical.lib
+abc -liberty NangateOpenCellLibrary_typical.lib
+
+# Generate area statistics report
+tee -o fp8_native_area.rpt stat -liberty NangateOpenCellLibrary_typical.lib
+
+# Write the synthesized gate-level netlist
+write_verilog fp8_native_synth.v

@@ -1,0 +1,37 @@
+# synth_fp8_tops.ys — Full FP8 Comparison: Time-Multiplexed MLB vs. INT MAC
+# Flow: synth → dfflibmap → abc -liberty → stat -liberty
+
+# =======================================================================
+# 1. Synthesize FP8 MLB Top (Time-Multiplexed 1x MLB_4)
+# =======================================================================
+design -reset
+# Read all required Verilog files for the MLB hierarchy
+read_verilog bfp_aligner.v and_popcount_4_bit.v basis_multiplier.v MLB_MAC_unit.v MLB_MAC_4_bit.v fp8_mlb_top.v
+
+hierarchy -check -top fp8_mlb_top
+synth -top fp8_mlb_top
+
+dfflibmap -liberty NangateOpenCellLibrary_typical.lib
+abc -liberty NangateOpenCellLibrary_typical.lib
+
+# Generate area report and save the netlist
+tee -o fp8_mlb_top_area.rpt stat -liberty NangateOpenCellLibrary_typical.lib
+write_verilog fp8_mlb_synth.v
+
+
+# =======================================================================
+# 2. Synthesize FP8 INT Top (1x INT_MAC_64)
+# =======================================================================
+design -reset
+# Read all required Verilog files for the INT hierarchy
+read_verilog bfp_aligner.v int_mac_64.v fp8_int_top.v
+
+hierarchy -check -top fp8_int_top
+synth -top fp8_int_top
+
+dfflibmap -liberty NangateOpenCellLibrary_typical.lib
+abc -liberty NangateOpenCellLibrary_typical.lib
+
+# Generate area report and save the netlist
+tee -o fp8_int_top_area.rpt stat -liberty NangateOpenCellLibrary_typical.lib
+write_verilog fp8_int_synth.v

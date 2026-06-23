@@ -5,7 +5,7 @@ module MLB_4(output reg signed [20:0] mlb,output reg done,input [15:0] alpha_x,a
     generate
         for(i=0; i<4; i=i+1) begin
             for(j=0; j<4; j=j+1) begin
-                MLB_unit u_ij(.out(out[i][j]),.done(unit_done[i+j]),.alpha_x(alpha_x[i*4+3:i*4]),.alpha_w(alpha_w[j*4+3:j*4]),.axi(axi[i*64+63:64*i]),.awi(awi[j*64+63:64*j]),.clk(clk),.rst(rst),.valid_in(valid_in));
+                MLB_unit u_ij(.out(out[i][j]),.done(unit_done[4*i+j]),.alpha_x(alpha_x[i*4+3:i*4]),.alpha_w(alpha_w[j*4+3:j*4]),.axi(axi[i*64+63:64*i]),.awi(awi[j*64+63:64*j]),.clk(clk),.rst(rst),.valid_in(valid_in));
             end
         end
     endgenerate
@@ -33,7 +33,7 @@ module MLB_4(output reg signed [20:0] mlb,output reg done,input [15:0] alpha_x,a
     always @(posedge clk) begin
         done<=1'b0;
         if(rst) begin
-            mlb<=32'sd0;
+            mlb<=21'sd0;
             done<=1'b0;
         end
         else if(&unit_done) begin
