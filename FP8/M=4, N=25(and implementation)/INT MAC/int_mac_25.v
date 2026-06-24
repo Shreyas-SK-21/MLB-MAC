@@ -44,7 +44,7 @@ module int_mac_25 (
     input [3:0]        alpha_w,
     input signed [7:0] beta_xw,
 
-    output signed [20:0] result
+    output signed [23:0] result
 );
 
 // ============================================================
@@ -124,8 +124,8 @@ wire signed [24:0] scaled;
 
 assign alpha_prod   = alpha_x * alpha_w;
 assign alpha_prod_s = {1'b0, alpha_prod};
-assign scaled       = $signed(s_final) * $signed(alpha_prod_s);
+assign scaled       = $signed(s_final) * $signed(alpha_prod_s);//16+9=25
 
-assign result = scaled[20:0] + {{13{beta_xw[7]}}, beta_xw};
+assign result = scaled[23:0] + {{16{beta_xw[7]}}, beta_xw};
 
 endmodule

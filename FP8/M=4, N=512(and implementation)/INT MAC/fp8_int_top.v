@@ -4,7 +4,7 @@ module fp8_int_top (
     input  valid_in, // Connects to 'load' on the MAC array
     input  [4095:0] fp8_activations,
     input  [4095:0] fp8_weights,
-    output signed [20:0] wide_integer_sum,
+    output signed [27:0] wide_integer_sum,
     output signed [8:0]   shared_exponent
 );
 

@@ -1,11 +1,11 @@
 module MLB_4(
-    output reg signed [19:0] mlb,
+    output reg signed [21:0] mlb,
     output reg done,
     input [1023:0] axi, awi,
     input clk, rst, valid_in
 );
     genvar i, j;
-    wire signed [15:0] out[3:0][3:0];
+    wire signed [17:0] out[3:0][3:0];
     wire [15:0] unit_done;
 
     generate
@@ -29,9 +29,9 @@ module MLB_4(
     endgenerate
 
     // Reduction tree (Unchanged)
-    wire signed [16:0] s00,s01,s02,s03,s04,s05,s06,s07;
-    wire signed [17:0] s10,s11,s12,s13;
-    wire signed [18:0] s20,s21;
+    wire signed [18:0] s00,s01,s02,s03,s04,s05,s06,s07;
+    wire signed [19:0] s10,s11,s12,s13;
+    wire signed [20:0] s20,s21;
 
     assign s00=out[0][0]+out[0][1]; assign s01=out[0][2]+out[0][3];
     assign s02=out[1][0]+out[1][1]; assign s03=out[1][2]+out[1][3];   
@@ -44,7 +44,7 @@ module MLB_4(
 
     always @(posedge clk) begin
         if(rst) begin
-            mlb  <= 20'sd0;
+            mlb  <= 22'sd0;
             done <= 1'b0;
         end else begin
             done <= 1'b0; // Default state

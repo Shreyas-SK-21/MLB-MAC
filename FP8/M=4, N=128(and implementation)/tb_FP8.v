@@ -7,7 +7,7 @@ module tb_fp8_mlb_top;
     // ------------------------------------------------------------------
     reg  clk, rst, valid_in;
     reg  [1023:0] fp8_activations, fp8_weights;
-    wire signed [19:0] wide_integer_sum;
+    wire signed [21:0] wide_integer_sum;
     wire signed [8:0]   shared_exponent;
     wire         mac_done;
 
@@ -119,7 +119,7 @@ task fill_random_lanes(input allow_zero);
     //   - sign-split accumulation: pos_sum - neg_sum
     //   - shared_exponent = max_exp_x + max_exp_w - 20  (E4M3 bias=7, 2x7=14, 2x hidden-bit=6)
     // ------------------------------------------------------------------
-task compute_reference(output reg signed [19:0] ref_result,
+task compute_reference(output reg signed [21:0] ref_result,
                             output reg [8:0]         ref_exponent);
         integer i;
         reg sx, sw;
@@ -175,7 +175,7 @@ task compute_reference(output reg signed [19:0] ref_result,
     // mac_done, compute the reference, compare, and log the result
     // ------------------------------------------------------------------
 task apply_and_check(input [8*40-1:0] name);
-        reg signed [19:0] expected_result;
+        reg signed [21:0] expected_result;
         reg [8:0]         expected_exponent;
         integer timeout;
         begin

@@ -1,5 +1,5 @@
 module MLB_unit(
-    output signed [10:0] out,
+    output signed [12:0] out,
     output done,
     input [8:0] axi, awi,
     input [2:0] shift_amt, // Replaces alpha_x and alpha_w
@@ -20,17 +20,17 @@ module MLB_unit(
     );
 
     // ZERO-GATE MULTIPLIER: Just shift the popcount!
-    reg signed [10:0] shifted_out;
+    reg signed [12:0] shifted_out;
     reg done_reg;
 
     always @(posedge clk) begin
         if (rst) begin
-            shifted_out <= 11'sd0;
+            shifted_out <= 13'sd0;
             done_reg <= 1'b0;
         end else begin
             done_reg <= xp_done;
             if (xp_done) begin
-                // Cast to 11-bit signed, then shift by (i+j)
+                // Cast to 13-bit signed, then shift by (i+j)
                 shifted_out <= $signed({1'b0, inter}) << shift_amt;
             end
         end

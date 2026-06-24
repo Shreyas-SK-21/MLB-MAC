@@ -44,7 +44,7 @@ module int_mac_128 (
     input [3:0]        alpha_w,
     input signed [7:0] beta_xw,
 
-    output signed [20:0] result
+    output signed [25:0] result
 );
 
 // ============================================================
@@ -116,7 +116,7 @@ endgenerate
         end
     endgenerate
 
-wire signed [16:0] s_final;
+wire signed [17:0] s_final;
 assign s_final = $signed(s6[0]) + $signed(s6[1]);
 
 // ============================================================
@@ -128,12 +128,12 @@ assign s_final = $signed(s6[0]) + $signed(s6[1]);
 
 wire [7:0]        alpha_prod;   // ax x aw (unsigned 8-bit)
 wire signed [8:0] alpha_prod_s; // zero-extended to signed
-wire signed [25:0] scaled;
+wire signed [26:0] scaled;
 
 assign alpha_prod   = alpha_x * alpha_w;
 assign alpha_prod_s = {1'b0, alpha_prod};
-assign scaled       = $signed(s_final) * $signed(alpha_prod_s);
+assign scaled       = $signed(s_final) * $signed(alpha_prod_s);//9+18=27
 
-assign result = scaled[20:0] + {{13{beta_xw[7]}}, beta_xw};
+assign result = scaled[25:0] + {{18{beta_xw[7]}}, beta_xw};
 
 endmodule

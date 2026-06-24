@@ -1,4 +1,4 @@
-module fp8_mlb_top(output signed [20:0] wide_integer_sum,output signed [8:0] shared_exponent,output mac_done,input clk,rst,valid_in,input [2047:0] fp8_activations,fp8_weights);
+module fp8_mlb_top(output signed [22:0] wide_integer_sum,output signed [8:0] shared_exponent,output mac_done,input clk,rst,valid_in,input [2047:0] fp8_activations,fp8_weights);
     wire [1023:0] axi_planes;
     wire [1023:0] awi_planes;
     wire [3:0] max_exp_x;
@@ -64,22 +64,22 @@ module fp8_mlb_top(output signed [20:0] wide_integer_sum,output signed [8:0] sha
     wire [1023:0] muxed_axi_planes = is_neg_phase ? axi_planes_neg : axi_planes_pos;
 
     // ---------------- SINGLE MLB_4 ARRAY (Resource Shared) ----------------
-    wire signed [19:0] shared_sum_out;
+    wire signed [21:0] shared_sum_out;
     wire shared_done;
 
     MLB_4 mac_shared (.mlb(shared_sum_out),.done(shared_done),.axi(muxed_axi_planes),.awi(awi_planes),.clk(clk),.rst(rst),.valid_in(internal_valid));
 
     // ---------------- Output FSM: Catch & Combine ----------------
-    reg signed [19:0] pos_reg;
+    reg signed [21:0] pos_reg;
     reg got_pos;
-    reg signed [20:0] result_reg;
+    reg signed [22:0] result_reg;
     reg done_reg;
 
     always @(posedge clk) begin
         if (rst) begin
-            pos_reg <= 20'sd0;
+            pos_reg <= 22'sd0;
             got_pos <= 1'b0;
-            result_reg <= 21'sd0;
+            result_reg <= 23'sd0;
             done_reg <= 1'b0;
         end else begin
             done_reg <= 1'b0;

@@ -7,7 +7,7 @@ module tb_fp8_int_top;
     // ------------------------------------------------------------------
     reg  clk, rst, valid_in;
     reg  [1023:0] fp8_activations, fp8_weights;
-    wire signed [20:0] wide_integer_sum;
+    wire signed [25:0] wide_integer_sum;
     wire signed [8:0]   shared_exponent;
 
     integer pass_count = 0;
