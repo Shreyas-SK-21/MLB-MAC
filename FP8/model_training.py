@@ -1,4 +1,4 @@
-*"""
+"""
 FP8-BFP MLB-MAC QAT on ResNet-20 / CIFAR-10 — Kaggle Notebook
 ================================================================
 
@@ -128,7 +128,7 @@ def batched_mlb_dot_product(act_fp8, wgt_fp8, N, sort_by_exp=True):
         act_fp8 = act_fp8[:, sort_idx]
         wgt_fp8 = wgt_fp8[:, sort_idx]
 
-    num_chunks = math.ceil(K / N)
+    num_chunks = math.ceil(K / N)#zero pads if K_padded is greater than K
     K_padded = num_chunks * N
 
     if K_padded > K:
@@ -141,10 +141,10 @@ def batched_mlb_dot_product(act_fp8, wgt_fp8, N, sort_by_exp=True):
     act_reshaped = act_padded.view(batch, num_chunks, N)
     wgt_reshaped = wgt_padded.view(C_out, num_chunks, N)
 
-    sign_act = act_reshaped < 0
+    sign_act = act_reshaped < 0#collects sign
     sign_wgt = wgt_reshaped < 0
 
-    aligned_act, max_exp_x = batched_bfp_align(act_reshaped.abs().view(batch * num_chunks, N))
+    aligned_act, max_exp_x = batched_bfp_align(act_reshaped.abs().view(batch * num_chunks, N))#finds the max exponent
     aligned_wgt, max_exp_w = batched_bfp_align(wgt_reshaped.abs().view(C_out * num_chunks, N))
 
     aligned_act = aligned_act.view(batch, num_chunks, N)
@@ -152,22 +152,22 @@ def batched_mlb_dot_product(act_fp8, wgt_fp8, N, sort_by_exp=True):
     aligned_wgt = aligned_wgt.view(C_out, num_chunks, N)
     max_exp_w = max_exp_w.view(C_out, num_chunks)
 
-    sign_act_f = torch.where(sign_act, -1.0, 1.0)
+    sign_act_f = torch.where(sign_act, -1.0, 1.0)#converts sign to -1 and 1
     sign_wgt_f = torch.where(sign_wgt, -1.0, 1.0)
 
-    signed_act = aligned_act.float() * sign_act_f
+    signed_act = aligned_act.float() * sign_act_f#adding the sign
     signed_wgt = aligned_wgt.float() * sign_wgt_f
 
     act_perm = signed_act.permute(1, 0, 2)
     wgt_perm = signed_wgt.permute(1, 0, 2)
 
-    raw_dot = torch.bmm(act_perm, wgt_perm.transpose(1, 2))
+    raw_dot = torch.bmm(act_perm, wgt_perm.transpose(1, 2))#multiplication
 
     scale_x = (2.0 ** max_exp_x.float()).t().unsqueeze(2)
     scale_w = (2.0 ** max_exp_w.float()).t().unsqueeze(1)
 
-    chunk_results = raw_dot * scale_x * scale_w * (2.0 ** -_SHARED_EXP_OFFSET)
-    return chunk_results.sum(dim=0)
+    chunk_results = raw_dot * scale_x * scale_w * (2.0 ** -_SHARED_EXP_OFFSET)#converts from FP8 to integer
+    return chunk_results.sum(dim=0)#sums and returns 
 
 
 def batched_fp8_dot_product(act_fp8, wgt_fp8):
