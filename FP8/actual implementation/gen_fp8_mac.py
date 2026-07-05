@@ -27,7 +27,7 @@ import random
 import math
 
 N_LIST = [9, 25, 32, 64, 128, 256, 512]
-OUT_DIR = "/mnt/user-data/outputs"
+OUT_DIR = "/Users/grover.heer/Documents/IIITB/Projects/MLB(MultiLevelBinary)/FP8/actual implementation"
 
 # ----------------------------------------------------------------------
 # Golden (bit-exact) software model of the RTL arithmetic
@@ -150,9 +150,6 @@ module FP8_NATIVE_MAC_{n} (
     output reg signed [{final_w-1}:0] final_acc // {final_w}-bit exact sum (implicit scale 2^-18)
 );
 
-    // ====================================================================
-    // STAGE 1: {n} Native FP8 Multipliers -> {base_w}-bit Fixed-Point
-    // ====================================================================
     reg signed [{base_w-1}:0] shifted_prod [0:{n-1}];
     reg stage1_valid;
 
@@ -167,26 +164,18 @@ module FP8_NATIVE_MAC_{n} (
             wire sign_w = fp8_wgt[i*8 + 7];
             wire [3:0] exp_w = fp8_wgt[i*8 + 3 +: 4];
             wire [2:0] man_w = fp8_wgt[i*8 +: 3];
-
-            // 1. Add hidden bit for normal numbers (0 for subnormals)
             wire [3:0] true_man_a = (exp_a == 4'd0) ? {{1'b0, man_a}} : {{1'b1, man_a}};
             wire [3:0] true_man_w = (exp_w == 4'd0) ? {{1'b0, man_w}} : {{1'b1, man_w}};
-
-            // 2. Adjust Exponents for Subnormals (If 0, act as 1 for math purposes)
             wire [3:0] true_exp_a = (exp_a == 4'd0) ? 4'd1 : exp_a;
             wire [3:0] true_exp_w = (exp_w == 4'd0) ? 4'd1 : exp_w;
 
-            // 3. Multiplication Logic
             wire sign_out = sign_a ^ sign_w;
             wire [7:0] prod_mant = true_man_a * true_man_w; // 4b x 4b = 8b
             wire [4:0] exp_sum = true_exp_a + true_exp_w;   // Range: 2 to 30
 
-            // 4. Shift into fixed-point integer (LSB represents 2^-18)
-            // Mathematical shift amount is exactly (exp_sum - 2)
             wire [4:0] shift_amt = exp_sum - 5'd2;
             wire [35:0] aligned_mag = {{28'd0, prod_mant}} << shift_amt;
-
-            // 5. Apply Sign and Register
+            
             always @(posedge clk) begin
                 if (rst) begin
                     shifted_prod[i] <= {base_w}'sd0;
@@ -206,14 +195,9 @@ module FP8_NATIVE_MAC_{n} (
         else     stage1_valid <= valid_in;
     end
 
-    // ====================================================================
-    // STAGE 2: {n}-to-1 Integer Reduction Tree
-    // ====================================================================
+
 {tree_text}
 
-    // ====================================================================
-    // STAGE 3: Final Output Register
-    // ====================================================================
     always @(posedge clk) begin
         if (rst) begin
             final_acc <= {final_w}'sd0;
@@ -392,7 +376,6 @@ module tb_FP8_NATIVE_MAC_{n};
             @(negedge clk);
             valid_in = 1'b0;
 
-            // Pipeline is 2 cycles deep (stage1 reg -> stage2 comb -> stage3 reg)
             @(negedge clk);
             wait (done == 1'b1 || 1); // stage 3 registers same cycle 'done' asserts
             #0.1;

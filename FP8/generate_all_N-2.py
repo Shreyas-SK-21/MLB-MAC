@@ -303,22 +303,8 @@ def gen_bfp_aligner(N):
         "    output reg [%d:0] aligned_planes, // Reorganized for MLB_4 axi/awi ports" % (PW - 1),
         "    output reg [3:0]   max_exp",
         ");",
-        "    // ------------------------------------------------------------------",
-        "    // PIPELINE + TREE FIX:",
-        "    //  1) The exponent max-search below is a LOG-DEPTH binary max-tree",
-        "    //     (not a sequential running-max loop), so comparator depth is",
-        "    //     O(log2 N) instead of O(N). This was the actual bottleneck at",
-        "    //     large N even after output-registering the aligner.",
-        "    //  2) Per-lane mantissa/shift/corner-turn logic is fully parallel",
-        "    //     'generate' assigns -- each lane depends only on the final",
-        "    //     max_exp_c value, never on another lane -- so it adds only",
-        "    //     one small (4-bit) shifter's worth of depth, not N of them.",
-        "    //  3) The whole result is registered on clk, giving a clean",
-        "    //     pipeline boundary before the MAC array.",
-        "    // ------------------------------------------------------------------",
         "    genvar g;",
         "",
-        "    // ---- Phase 1a: parallel exponent extraction ----",
         "    wire [3:0] exps_w [0:%d];" % (N - 1),
         "    generate",
         "        for (g=0; g<%d; g=g+1) begin : extract_exp" % N,
@@ -326,7 +312,6 @@ def gen_bfp_aligner(N):
         "        end",
         "    endgenerate",
         "",
-        "    // ---- Phase 1b: log-depth max-reduction tree ----",
     ]
     for wd in wire_decls:
         lines.append("    " + wd)
@@ -337,14 +322,11 @@ def gen_bfp_aligner(N):
     lines.append("    wire [3:0] max_exp_c = %s;" % max_expr)
     lines.append("")
     lines += [
-        "    // ---- Phase 2: parallel per-lane mantissa extraction, shift, corner-turn ----",
         "    wire [3:0] mants_w        [0:%d];" % (N - 1),
         "    wire [3:0] shifted_mant_w [0:%d];" % (N - 1),
         "    generate",
         "        for (g=0; g<%d; g=g+1) begin : align_lane" % N,
-        "            // Extract mantissa and add hidden '1' (flush subnormals to zero)",
         "            assign mants_w[g] = (exps_w[g] != 4'd0) ? {1'b1, fp8_vec[(g*8) +: 3]} : 4'd0;",
-        "            // Right shift to align to the block max exponent",
         "            assign shifted_mant_w[g] = mants_w[g] >> (max_exp_c - exps_w[g]);",
         "        end",
         "    endgenerate",
@@ -352,7 +334,6 @@ def gen_bfp_aligner(N):
         "    wire [%d:0] aligned_planes_c;" % (PW - 1),
         "    generate",
         "        for (g=0; g<%d; g=g+1) begin : corner_turn" % N,
-        "            // CORNER TURN: map the 4-bit integer into the 4 planes for MLB_4",
         "            assign aligned_planes_c[g]         = shifted_mant_w[g][0]; // Plane 0 (axi[%d:0])" % (N - 1),
         "            assign aligned_planes_c[%d + g]  = shifted_mant_w[g][1]; // Plane 1 (axi[%d:%d])" % (N, 2*N-1, N),
         "            assign aligned_planes_c[%d + g] = shifted_mant_w[g][2]; // Plane 2 (axi[%d:%d])" % (2*N, 3*N-1, 2*N),
@@ -360,7 +341,6 @@ def gen_bfp_aligner(N):
         "        end",
         "    endgenerate",
         "",
-        "    // Register the aligner's result -- one clean pipeline boundary.",
         "    always @(posedge clk) begin",
         "        aligned_planes <= aligned_planes_c;",
         "        max_exp        <= max_exp_c;",
@@ -385,7 +365,6 @@ def gen_and_popcount(N):
         ");",
         "    wire [%d:0] xnn = a & b;" % (N - 1),
         "",
-        "    // Explicit Binary Reduction Tree for Area & Timing optimization",
     ]
     for wd in wire_decls:
         lines.append("    " + wd)
@@ -434,7 +413,6 @@ def gen_mlb_unit(N):
         "    wire [%d:0] inter;" % (PC - 1),
         "    wire xp_done;",
         "    ",
-        "    // The core Popcount engine",
         "    and_popcount_4_bit xp(",
         "        .f_output(inter),",
         "        .done(xp_done),",
@@ -445,7 +423,6 @@ def gen_mlb_unit(N):
         "        .valid_in(valid_in)",
         "    );",
         "",
-        "    // ZERO-GATE MULTIPLIER: Just shift the popcount!",
         "    reg signed [%d:0] shifted_out;" % (OUTW - 1),
         "    reg done_reg;",
         "",
@@ -456,7 +433,6 @@ def gen_mlb_unit(N):
         "        end else begin",
         "            done_reg <= xp_done;",
         "            if (xp_done) begin",
-        "                // Cast to %d-bit signed, then shift by (i+j)" % OUTW,
         "                shifted_out <= $signed({1'b0, inter}) << shift_amt;",
         "            end",
         "        end",
@@ -562,11 +538,6 @@ def gen_fp8_top(N):
         "    wire [3:0] max_exp_w;",
         "    bfp_aligner align_x (.clk(clk),.fp8_vec(fp8_activations),.aligned_planes(axi_planes),.max_exp(max_exp_x));",
         "    bfp_aligner align_w (.clk(clk),.fp8_vec(fp8_weights),.aligned_planes(awi_planes),.max_exp(max_exp_w));",
-        "    // ---------------- Sign handling ----------------",
-        "    // sign_k is derived directly from the raw (un-registered) inputs, but",
-        "    // axi_planes/awi_planes now arrive ONE cycle late from the pipelined",
-        "    // aligner above. Register sign_k by 1 cycle so pos_mask/neg_mask line",
-        "    // up in time with the aligned planes they are ANDed against.",
         "    wire [%d:0] sign_k;" % (N - 1),
         "    genvar i;",
         "    generate",
@@ -590,10 +561,6 @@ def gen_fp8_top(N):
         "    assign axi_planes_neg[%d:%d] = axi_planes[%d:%d] & neg_mask;" % (3*N-1, 2*N, 3*N-1, 2*N),
         "    assign axi_planes_neg[%d:%d] = axi_planes[%d:%d] & neg_mask;" % (4*N-1, 3*N, 4*N-1, 3*N),
         "",
-        "    // ---------------- FSM: Input Time-Multiplexing ----------------",
-        "    // valid_in is delayed by 1 cycle to match the aligner's registered",
-        "    // latency -- otherwise the FSM would fire before axi_planes/awi_planes",
-        "    // (and sign_k_d1) are actually valid.",
         "    reg valid_in_d1;",
         "    always @(posedge clk) begin",
         "        if (rst) valid_in_d1 <= 1'b0;",
@@ -632,16 +599,13 @@ def gen_fp8_top(N):
         "        end",
         "    end",
         "",
-        "    // Input MUX: Select positive or negative planes based on the FSM phase",
         "    wire [%d:0] muxed_axi_planes = is_neg_phase ? axi_planes_neg : axi_planes_pos;" % (PW - 1),
         "",
-        "    // ---------------- SINGLE MLB_4 ARRAY (Resource Shared) ----------------",
         "    wire signed [%d:0] shared_sum_out;" % (MLBW - 1),
         "    wire shared_done;",
         "",
         "    MLB_4 mac_shared (.mlb(shared_sum_out),.done(shared_done),.axi(muxed_axi_planes),.awi(awi_planes),.clk(clk),.rst(rst),.valid_in(internal_valid));",
         "",
-        "    // ---------------- Output FSM: Catch & Combine ----------------",
         "    reg signed [%d:0] pos_reg;" % (MLBW - 1),
         "    reg got_pos;",
         "    reg signed [%d:0] result_reg;" % (SUMW - 1),
@@ -658,11 +622,9 @@ def gen_fp8_top(N):
         "            ",
         "            if (shared_done) begin",
         "                if (!got_pos) begin",
-        "                    // First pulse out of the pipeline is the Positive Sum",
         "                    pos_reg <= shared_sum_out;",
         "                    got_pos <= 1'b1;",
         "                end else begin",
-        "                    // Second pulse out of the pipeline is the Negative Sum",
         "                    result_reg <= pos_reg - shared_sum_out; // pos_sum - neg_sum",
         "                    done_reg <= 1'b1; // Fire final done signal to testbench",
         "                    got_pos <= 1'b0;  // Reset for the next inference",
@@ -694,10 +656,6 @@ def gen_tb_mlb(N):
 `timescale 1ns/1ps
 
 module tb_fp8_mlb_top;
-
-    // ------------------------------------------------------------------
-    // DUT signals
-    // ------------------------------------------------------------------
     reg  clk, rst, valid_in;
     reg  [%(VW_1)d:0] fp8_activations, fp8_weights;
     wire signed [%(SW_1)d:0] wide_integer_sum;
@@ -719,31 +677,16 @@ module tb_fp8_mlb_top;
         .mac_done(mac_done)
     );
 
-    // ------------------------------------------------------------------
-    // Clock
-    // ------------------------------------------------------------------
     initial clk = 1'b0;
     always #5 clk = ~clk;
 
-    // ------------------------------------------------------------------
-    // Per-lane stimulus storage (also used by the reference model)
-    // ------------------------------------------------------------------
     reg [7:0] act_lane [0:%(N_1)d];
     reg [7:0] wt_lane  [0:%(N_1)d];
-
-    // ------------------------------------------------------------------
-    // Waveform dump
-    // ------------------------------------------------------------------
     initial begin
         $dumpfile("mlb_mac_sim.vcd");
         $dumpvars(0, tb_fp8_mlb_top);
     end
 
-    // ------------------------------------------------------------------
-    // Random FP8 (E4M3) lane generator
-    //   allow_zero = 1 -> exponent field can be 0 (flushed-to-zero lane)
-    //   allow_zero = 0 -> exponent field forced to 1..15 (normal number)
-    // ------------------------------------------------------------------
     function [7:0] rand_fp8(input allow_zero);
         reg [31:0] r1, r2, r3;
         reg [3:0]  exp_f;
@@ -759,9 +702,6 @@ module tb_fp8_mlb_top;
         end
     endfunction
 
-    // ------------------------------------------------------------------
-    // Helpers to build directed stimulus
-    // ------------------------------------------------------------------
     task clear_all_lanes;
         integer i;
         begin
@@ -790,10 +730,6 @@ task fill_random_lanes(input allow_zero);
             end
         end
     endtask
-
-    // ------------------------------------------------------------------
-    // Pack the %(N)d lanes into the %(VW)d-bit DUT inputs
-    // ------------------------------------------------------------------
     task pack_vectors;
         integer i;
         begin
@@ -804,14 +740,6 @@ task fill_random_lanes(input allow_zero);
         end
     endtask
 
-    // ------------------------------------------------------------------
-    // Behavioral reference model
-    // Mirrors exactly what the RTL is supposed to compute:
-    //   - independent per-vector BFP alignment (max exponent per vector)
-    //   - subnormal (exp==0) lanes flushed to zero
-    //   - sign-split accumulation: pos_sum - neg_sum
-    //   - shared_exponent = max_exp_x + max_exp_w - 20  (E4M3 bias=7, 2x7=14, 2x hidden-bit=6)
-    // ------------------------------------------------------------------
 task compute_reference(output reg signed [%(SW_1)d:0] ref_result,
                             output reg [8:0]         ref_exponent);
         integer i;
@@ -862,11 +790,6 @@ task compute_reference(output reg signed [%(SW_1)d:0] ref_result,
             ref_exponent = $signed({5'b0, max_ex}) + $signed({5'b0, max_ew}) - 9'sd20;
         end
     endtask
-
-    // ------------------------------------------------------------------
-    // Drive DUT with the currently-loaded act_lane/wt_lane, wait for
-    // mac_done, compute the reference, compare, and log the result
-    // ------------------------------------------------------------------
 task apply_and_check(input [8*40-1:0] name);
         reg signed [%(SW_1)d:0] expected_result;
         reg [8:0]         expected_exponent;
@@ -876,15 +799,12 @@ task apply_and_check(input [8*40-1:0] name);
             pack_vectors;
             compute_reference(expected_result, expected_exponent);
 
-            // --- THE FIX: Safe 1-cycle pulse using negedge ---
             @(negedge clk);
             valid_in = 1'b1;
             @(negedge clk);
             valid_in = 1'b0;
-            // -------------------------------------------------
 
             timeout = 0;
-            // Wait for the pipeline to finish
             while (!mac_done && timeout < 2000) begin
                 @(posedge clk);
                 timeout = timeout + 1;
@@ -913,10 +833,6 @@ task apply_and_check(input [8*40-1:0] name);
             @(posedge clk);
         end
     endtask
-
-    // ------------------------------------------------------------------
-    // Main stimulus
-    // ------------------------------------------------------------------
     integer t;
     integer i;
     initial begin
@@ -930,55 +846,51 @@ task apply_and_check(input [8*40-1:0] name);
         rst = 1'b0;
         @(posedge clk);
 
-        // ---------------- Directed corner cases ----------------
-
-        // 1: all-zero inputs
         clear_all_lanes;
         apply_and_check("All zeros");
 
-        // 2: all lanes = +1.0 x +1.0  (sign=0, exp=7(bias), mant_frac=0)
         for (i = 0; i < %(N)d; i = i + 1) begin
             set_lane(0, i, 1'b0, 4'd7, 3'b000);
             set_lane(1, i, 1'b0, 4'd7, 3'b000);
         end
         apply_and_check("All positive equal value");
 
-        // 3: all activations positive, all weights negative -> result must be negative
+
         for (i = 0; i < %(N)d; i = i + 1) begin
             set_lane(0, i, 1'b0, 4'd7, 3'b000);
             set_lane(1, i, 1'b1, 4'd7, 3'b000);
         end
         apply_and_check("All positive act, all negative weight");
 
-        // 4: both operands negative -> product sign must cancel to positive
+
         for (i = 0; i < %(N)d; i = i + 1) begin
             set_lane(0, i, 1'b1, 4'd7, 3'b011);
             set_lane(1, i, 1'b1, 4'd7, 3'b011);
         end
         apply_and_check("Both negative (signs cancel)");
 
-        // 5: alternating sign pattern, lane by lane
+    
         for (i = 0; i < %(N)d; i = i + 1) begin
             set_lane(0, i, i[0], 4'd9, 3'b010);
             set_lane(1, i, 1'b0,  4'd9, 3'b101);
         end
         apply_and_check("Alternating activation sign");
 
-        // 6: max magnitude on every lane (stress accumulator width)
+
         for (i = 0; i < %(N)d; i = i + 1) begin
             set_lane(0, i, 1'b0, 4'd15, 3'b111);
             set_lane(1, i, 1'b0, 4'd15, 3'b111);
         end
         apply_and_check("Max magnitude, all positive");
 
-        // 7: max magnitude, all negative-pair-mixed (stress width + sign)
+
         for (i = 0; i < %(N)d; i = i + 1) begin
             set_lane(0, i, i[0],  4'd15, 3'b111);
             set_lane(1, i, ~i[0], 4'd15, 3'b111);
         end
         apply_and_check("Max magnitude, alternating signs");
 
-        // 8: subnormal flush check -- half lanes exponent=0 (must contribute 0)
+
         for (i = 0; i < %(N)d; i = i + 1) begin
             if (i[0]) begin
                 set_lane(0, i, 1'b0, 4'd0, 3'b101); // exp=0 -> flushed to 0
@@ -990,13 +902,12 @@ task apply_and_check(input [8*40-1:0] name);
         end
         apply_and_check("Subnormal flush (half lanes exp=0)");
 
-        // 9: single nonzero lane among %(N_1)d zero lanes
+
         clear_all_lanes;
         set_lane(0, 0, 1'b0, 4'd10, 3'b110);
         set_lane(1, 0, 1'b1, 4'd10, 3'b110);
         apply_and_check("Single nonzero lane");
 
-        // 10: wide dynamic range -- one huge lane, rest tiny (heavy shift-to-zero)
         clear_all_lanes;
         set_lane(0, 0, 1'b0, 4'd15, 3'b111);
         set_lane(1, 0, 1'b0, 4'd15, 3'b111);
@@ -1006,14 +917,13 @@ task apply_and_check(input [8*40-1:0] name);
         end
         apply_and_check("Wide dynamic range (shift-to-zero stress)");
 
-        // 11: all activations zero-exponent, weights normal -> result must be 0
         for (i = 0; i < %(N)d; i = i + 1) begin
             set_lane(0, i, 1'b0, 4'd0, 3'b111);
             set_lane(1, i, 1'b0, 4'd12, 3'b101);
         end
         apply_and_check("All activations flushed to zero");
 
-        // ---------------- Randomized cases ----------------
+
         for (t = 0; t < 50; t = t + 1) begin
             if (t %% 3 == 0)
                 fill_random_lanes(1'b1);  // allow zero-exponent lanes
@@ -1021,10 +931,6 @@ task apply_and_check(input [8*40-1:0] name);
                 fill_random_lanes(1'b0);  // normal numbers only
             apply_and_check("Random test");
         end
-
-        // =====================================================================
-        // Final report
-        // =====================================================================
         $display("\\n======================================================");
         $display("  TEST SUMMARY: %%0d PASSED,  %%0d FAILED",
                   pass_count, fail_count);
@@ -1056,47 +962,11 @@ def gen_int_mac_n(N):
     ga = "\n".join("    " + x for x in gen_lines)
 
     code = """\
-// ============================================================
-// Full Integer MAC -- M=4, N=K=%(N)d  (Sign-After-Multiply version)
-//
-// Key difference from original:
-//   Mantissas are received as 4-bit UNSIGNED [0..15].
-//   A separate sign_flat bus carries one XOR-sign bit per lane.
-//   Multiplication is done unsigned, sign is applied AFTER
-//   the product -- exactly like the FP8 MLB pos/neg mask approach.
-//   This eliminates the >>1 truncation that cost 1 bit of precision.
-//
-// Block 1 : %(N)d parallel unsigned MAC lanes
-//           product_i = a_i * b_i          (4bx4b -> 8b unsigned)
-//           signed_product_i = sign_i ? -product_i : +product_i  (9b signed)
-//           acc_i += signed_product_i       (11b signed, handles M=4)
-//
-// Block 2 : Reduction tree %(N)d -> 1         (%(RW)d-bit signed result)
-//
-// Block 3 : Scaling + offset
-//           result = ax*aw*s_final + bxw
-//
-// Ports
-//   clk      -- clock
-//   rst      -- synchronous reset
-//   load     -- hold high for M cycles to accumulate M dot-product slices
-//   a_flat   -- %(N)d x 4-bit UNSIGNED activations (%(VW)d-bit bus)
-//   b_flat   -- %(N)d x 4-bit UNSIGNED weights     (%(VW)d-bit bus)
-//   sign_flat-- %(N)d x 1-bit product sign         (sign_x XOR sign_w)
-//   alpha_x  -- unsigned 4-bit scaling factor ax
-//   alpha_w  -- unsigned 4-bit scaling factor aw
-//   beta_xw  -- signed 8-bit offset bxw
-//   result   -- 21-bit signed dot(x^q, w^q)
-// ============================================================
 
 module int_mac_%(N)d (
     input clk,
     input rst,
     input load,
-    // NOTE: rst/load are fanned out via a grouped buffer tree below
-    // (BLOCK 0) to avoid a single flat net driving all %(N)d accumulator
-    // lanes -- see gen_int_mac_n() patch, added to fix max_fanout/max_cap
-    // violations on 'rst' (fanout ~%(N)d*22, e.g. 5633 @ N=256) and 'load'.
 
     input [%(VW_1)d:0] a_flat,    // %(N)d x 4-bit UNSIGNED activations
     input [%(VW_1)d:0] b_flat,    // %(N)d x 4-bit UNSIGNED weights
@@ -1108,23 +978,6 @@ module int_mac_%(N)d (
 
     output signed [20:0] result
 );
-
-// ============================================================
-// BLOCK 0 -- rst/load fanout buffering
-//
-// Fix for max_fanout / max_capacitance violations: a single flat
-// 'rst' or 'load' net driving all %(N)d accumulator lanes blows past
-// a fanout limit of 16 (e.g. fanout ~5633 seen at N=256, since each
-// lane's reset mux + set/clear pin ~doubles the raw lane count).
-// Instead of relying on the resizer to insert a deep buffer tree in
-// one pass (which repair_design only partially converges on for very
-// wide nets), we explicitly fan rst/load out into GROUP-sized
-// clusters here. Each cluster net only drives GROUP lanes, so its
-// fanout (~GROUP, plus the mux/set-reset factor) stays comfortably
-// under the limit without needing multiple repair_design iterations.
-// This is purely combinational replication -- no functional change,
-// no added latency.
-// ============================================================
 
 localparam GROUP = 16;
 localparam NGRP  = (%(N)d + GROUP - 1) / GROUP;
@@ -1140,14 +993,6 @@ generate
     end
 endgenerate
 
-// ============================================================
-// BLOCK 1 -- %(N)d parallel unsigned Multiply + sign + Accumulate
-//
-// product_i        : 4b x 4b unsigned -> 8-bit unsigned  (max 225)
-// signed_product_i : +/-product_i     -> 9-bit signed    (+/-225)
-// acc_i            : sum signed_products -> 11-bit signed  (M=4: max +/-900)
-// ============================================================
-
 wire [7:0]         product       [0:%(N_1)d]; // unsigned magnitude product
 wire signed [8:0]  signed_product[0:%(N_1)d]; // sign applied after multiply
 reg  signed [10:0] acc           [0:%(N_1)d]; // accumulator, 11-bit for M=4
@@ -1156,17 +1001,11 @@ genvar i;
 generate
     for (i = 0; i < %(N)d; i = i + 1) begin : gen_mac_lane
 
-        // Unsigned 4-bit x 4-bit multiply (no precision loss)
-        assign product[i] = a_flat[4*i +: 4] * b_flat[4*i +: 4];
 
-        // Apply sign AFTER multiply: negative if sign_x XOR sign_w = 1
+        assign product[i] = a_flat[4*i +: 4] * b_flat[4*i +: 4];
         assign signed_product[i] = sign_flat[i]
                                     ? -$signed({1'b0, product[i]})
                                     :  $signed({1'b0, product[i]});
-
-        // Accumulate (sign-extend 9-bit -> 11-bit before adding)
-        // Uses the grouped rst_buf/load_buf clusters from BLOCK 0
-        // instead of the raw top-level rst/load nets.
         always @(posedge clk) begin
             if (rst_buf[i/GROUP])
                 acc[i] <= 11'sd0;
@@ -1177,10 +1016,6 @@ generate
     end
 endgenerate
 
-// ============================================================
-// BLOCK 2 -- Reduction tree %(N)d -> 1
-// acc = 11-bit signed, each level adds 1 guard bit
-// ============================================================
 
 %(WD)s
 
@@ -1189,12 +1024,6 @@ endgenerate
 %(FW)s
 assign s_final = %(FE)s;
 
-// ============================================================
-// BLOCK 3 -- Scaling ax*aw x sum + offset bxw
-// ax, aw  : unsigned 4-bit -> product 8-bit unsigned
-// s_final : signed %(RW)d-bit
-// scaled  : %(SW)d-bit (truncated to 21)
-// ============================================================
 
 wire [7:0]        alpha_prod;   // ax x aw (unsigned 8-bit)
 wire signed [8:0] alpha_prod_s; // zero-extended to signed
@@ -1234,7 +1063,6 @@ def gen_fp8_int_top(N):
         "    output signed [8:0]   shared_exponent",
         ");",
         "",
-        "    // ---------------- BFP alignment (Reused from MLB design) ----------------",
         "    wire [%d:0] axi_planes;" % (PW - 1),
         "    wire [%d:0] awi_planes;" % (PW - 1),
         "    wire [3:0]   max_exp_x;",
@@ -1254,15 +1082,6 @@ def gen_fp8_int_top(N):
         "        .max_exp(max_exp_w)",
         "    );",
         "",
-        "    // ---------------- Format for INT MAC (Plane-to-Flat, Sign Separate) ----------------",
-        "    // Mantissas stay UNSIGNED [0..15]. Sign is handled AFTER multiplication inside int_mac_%d," % N,
-        "    // exactly like the FP8 MLB design -- avoids the >>1 truncation of the old approach.",
-        "    //",
-        "    // axi_planes/awi_planes now arrive ONE cycle late from the pipelined",
-        "    // aligner above. The sign-XOR term below is derived from the raw",
-        "    // (un-registered) fp8_activations/fp8_weights, so we register those",
-        "    // inputs by 1 cycle too -- otherwise sign_flat_reg would be computed",
-        "    // one cycle EARLIER than the mantissas it's supposed to pair with.",
         "    reg [%d:0] fp8_activations_d1;" % (VW - 1),
         "    reg [%d:0] fp8_weights_d1;" % (VW - 1),
         "    always @(posedge clk) begin",
@@ -1304,16 +1123,12 @@ def gen_fp8_int_top(N):
         "        end",
         "    endgenerate",
         "",
-        "    // valid_in delayed by 1 cycle to match the aligner's registered",
-        "    // latency -- the INT MAC array must not start accumulating before",
-        "    // a_flat_wire/b_flat_wire/sign_flat_reg are actually valid.",
         "    reg valid_in_d1;",
         "    always @(posedge clk) begin",
         "        if (rst) valid_in_d1 <= 1'b0;",
         "        else     valid_in_d1 <= valid_in;",
         "    end",
         "",
-        "    // ---------------- INT MAC Instantiation ----------------",
         "    int_mac_%d mac_array (" % N,
         "        .clk(clk),",
         "        .rst(rst),",
@@ -1327,10 +1142,6 @@ def gen_fp8_int_top(N):
         "        .result(wide_integer_sum)",
         "    );",
         "",
-        "    // ---------------- Final Exponent ----------------",
-        "    // No >>1 compensation needed anymore. Full 4-bit mantissas are used (hidden bit at",
-        "    // position 3, so each mantissa integer is 2^3 = 8x the true fraction).",
-        "    // Two mantissas multiplied -> 2^6 total scale -> same formula as FP8 MLB: bias*2 + 6 = 14+6 = 20",
         "    assign shared_exponent = $signed({5'b0, max_exp_x}) + $signed({5'b0, max_exp_w}) - 9'sd20;",
         "",
         "endmodule",
@@ -1348,10 +1159,6 @@ def gen_tb_int(N):
 `timescale 1ns/1ps
 
 module tb_fp8_int_top;
-
-    // ------------------------------------------------------------------
-    // DUT signals
-    // ------------------------------------------------------------------
     reg  clk, rst, valid_in;
     reg  [%(VW_1)d:0] fp8_activations, fp8_weights;
     wire signed [20:0] wide_integer_sum;
@@ -1361,7 +1168,6 @@ module tb_fp8_int_top;
     integer fail_count = 0;
     integer test_num   = 0;
 
-    // Instantiate the INT MAC top-level wrapper
     fp8_int_top dut (
         .clk(clk),
         .rst(rst),
@@ -1372,29 +1178,19 @@ module tb_fp8_int_top;
         .shared_exponent(shared_exponent)
     );
 
-    // ------------------------------------------------------------------
-    // Clock
-    // ------------------------------------------------------------------
     initial clk = 1'b0;
     always #5 clk = ~clk;
 
-    // ------------------------------------------------------------------
-    // Per-lane stimulus storage
-    // ------------------------------------------------------------------
+
     reg [7:0] act_lane [0:%(N_1)d];
     reg [7:0] wt_lane  [0:%(N_1)d];
 
-    // ------------------------------------------------------------------
-    // Waveform dump
-    // ------------------------------------------------------------------
+
     initial begin
         $dumpfile("int_mac_sim.vcd");
         $dumpvars(0, tb_fp8_int_top);
     end
 
-    // ------------------------------------------------------------------
-    // Random FP8 (E4M3) lane generator
-    // ------------------------------------------------------------------
     function [7:0] rand_fp8(input allow_zero);
         reg [31:0] r1, r2, r3;
         reg [3:0]  exp_f;
@@ -1410,9 +1206,6 @@ module tb_fp8_int_top;
         end
     endfunction
 
-    // ------------------------------------------------------------------
-    // Helpers to build directed stimulus
-    // ------------------------------------------------------------------
     task clear_all_lanes;
         integer i;
         begin
@@ -1452,9 +1245,6 @@ task pack_vectors;
         end
     endtask
 
-    // ------------------------------------------------------------------
-    // Behavioral reference model (UPDATED: sign-after-multiply, no >>1 truncation)
-    // ------------------------------------------------------------------
 task compute_reference(output reg signed [20:0] ref_result,
                            output reg [8:0]         ref_exponent);
         integer i;
@@ -1508,9 +1298,6 @@ task compute_reference(output reg signed [20:0] ref_result,
         end
     endtask
 
-    // ------------------------------------------------------------------
-    // Apply and Check
-    // ------------------------------------------------------------------
 task apply_and_check(input [8*40-1:0] name);
         reg signed [20:0] expected_result;
         reg [8:0]         expected_exponent;
@@ -1548,10 +1335,6 @@ task apply_and_check(input [8*40-1:0] name);
             @(posedge clk);
         end
     endtask
-
-    // ------------------------------------------------------------------
-    // Main stimulus
-    // ------------------------------------------------------------------
     integer t;
     integer i;
     initial begin
@@ -1644,10 +1427,6 @@ task apply_and_check(input [8*40-1:0] name);
                 fill_random_lanes(1'b0);  // normal numbers only
             apply_and_check("Random test");
         end
-
-        // =====================================================================
-        // Final report
-        // =====================================================================
         $display("\\n======================================================");
         $display("  TEST SUMMARY: %%0d PASSED,  %%0d FAILED",
                   pass_count, fail_count);
