@@ -3,9 +3,13 @@ module fp8_mlb_top(output signed [18:0] wide_integer_sum,output signed [8:0] sha
     wire [99:0] awi_planes;
     wire [3:0] max_exp_x;
     wire [3:0] max_exp_w;
-    bfp_aligner align_x (.fp8_vec(fp8_activations),.aligned_planes(axi_planes),.max_exp(max_exp_x));
-    bfp_aligner align_w (.fp8_vec(fp8_weights),.aligned_planes(awi_planes),.max_exp(max_exp_w));
-    // ---------------- Sign handling (unchanged) ----------------
+    bfp_aligner align_x (.clk(clk),.fp8_vec(fp8_activations),.aligned_planes(axi_planes),.max_exp(max_exp_x));
+    bfp_aligner align_w (.clk(clk),.fp8_vec(fp8_weights),.aligned_planes(awi_planes),.max_exp(max_exp_w));
+    // ---------------- Sign handling ----------------
+    // sign_k is derived directly from the raw (un-registered) inputs, but
+    // axi_planes/awi_planes now arrive ONE cycle late from the pipelined
+    // aligner above. Register sign_k by 1 cycle so pos_mask/neg_mask line
+    // up in time with the aligned planes they are ANDed against.
     wire [24:0] sign_k;
     genvar i;
     generate
@@ -13,8 +17,10 @@ module fp8_mlb_top(output signed [18:0] wide_integer_sum,output signed [8:0] sha
             assign sign_k[i]=fp8_activations[i*8+7]^fp8_weights[i*8+7];
         end
     endgenerate
-    wire [24:0] pos_mask = ~sign_k;
-    wire [24:0] neg_mask = sign_k;
+    reg [24:0] sign_k_d1;
+    always @(posedge clk) sign_k_d1 <= sign_k;
+    wire [24:0] pos_mask = ~sign_k_d1;
+    wire [24:0] neg_mask = sign_k_d1;
     wire [99:0] axi_planes_pos;
     wire [99:0] axi_planes_neg;
     assign axi_planes_pos[24:0]    = axi_planes[24:0]    & pos_mask;
@@ -28,6 +34,15 @@ module fp8_mlb_top(output signed [18:0] wide_integer_sum,output signed [8:0] sha
     assign axi_planes_neg[99:75] = axi_planes[99:75] & neg_mask;
 
     // ---------------- FSM: Input Time-Multiplexing ----------------
+    // valid_in is delayed by 1 cycle to match the aligner's registered
+    // latency -- otherwise the FSM would fire before axi_planes/awi_planes
+    // (and sign_k_d1) are actually valid.
+    reg valid_in_d1;
+    always @(posedge clk) begin
+        if (rst) valid_in_d1 <= 1'b0;
+        else     valid_in_d1 <= valid_in;
+    end
+
     reg is_neg_phase;
     reg internal_valid;
     reg [1:0] state;
@@ -39,7 +54,7 @@ module fp8_mlb_top(output signed [18:0] wide_integer_sum,output signed [8:0] sha
         end else begin
             case (state)
                 2'd0: begin
-                    if (valid_in) begin
+                    if (valid_in_d1) begin
                         internal_valid <= 1'b1;
                         is_neg_phase <= 1'b0; // Launch Positive mask first
                         state <= 2'd1;

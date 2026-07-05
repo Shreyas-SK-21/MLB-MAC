@@ -4,7 +4,7 @@ module fp8_int_top (
     input  valid_in, // Connects to 'load' on the MAC array
     input  [4095:0] fp8_activations,
     input  [4095:0] fp8_weights,
-    output signed [27:0] wide_integer_sum,
+    output signed [20:0] wide_integer_sum,
     output signed [8:0]   shared_exponent
 );
 
@@ -15,12 +15,14 @@ module fp8_int_top (
     wire [3:0]   max_exp_w;
 
     bfp_aligner align_x (
+        .clk(clk),
         .fp8_vec(fp8_activations),
         .aligned_planes(axi_planes),
         .max_exp(max_exp_x)
     );
 
     bfp_aligner align_w (
+        .clk(clk),
         .fp8_vec(fp8_weights),
         .aligned_planes(awi_planes),
         .max_exp(max_exp_w)
@@ -29,6 +31,19 @@ module fp8_int_top (
     // ---------------- Format for INT MAC (Plane-to-Flat, Sign Separate) ----------------
     // Mantissas stay UNSIGNED [0..15]. Sign is handled AFTER multiplication inside int_mac_512,
     // exactly like the FP8 MLB design -- avoids the >>1 truncation of the old approach.
+    //
+    // axi_planes/awi_planes now arrive ONE cycle late from the pipelined
+    // aligner above. The sign-XOR term below is derived from the raw
+    // (un-registered) fp8_activations/fp8_weights, so we register those
+    // inputs by 1 cycle too -- otherwise sign_flat_reg would be computed
+    // one cycle EARLIER than the mantissas it's supposed to pair with.
+    reg [4095:0] fp8_activations_d1;
+    reg [4095:0] fp8_weights_d1;
+    always @(posedge clk) begin
+        fp8_activations_d1 <= fp8_activations;
+        fp8_weights_d1     <= fp8_weights;
+    end
+
     reg [3:0]  a_flat_reg  [0:511]; // 4-bit unsigned mantissa per lane
     reg [3:0]  b_flat_reg  [0:511]; // 4-bit unsigned mantissa per lane
     reg [511:0] sign_flat_reg;      // product sign per lane: sign_x XOR sign_w
@@ -49,7 +64,8 @@ module fp8_int_top (
             b_flat_reg[i] = mant_w;
 
             // 2. Compute product sign (sign-magnitude rule: sign = XOR of input signs)
-            sign_flat_reg[i] = fp8_activations[i*8 + 7] ^ fp8_weights[i*8 + 7];
+            //    using the delayed (aligned-in-time) activation/weight copies.
+            sign_flat_reg[i] = fp8_activations_d1[i*8 + 7] ^ fp8_weights_d1[i*8 + 7];
         end
     end
 
@@ -62,11 +78,20 @@ module fp8_int_top (
         end
     endgenerate
 
+    // valid_in delayed by 1 cycle to match the aligner's registered
+    // latency -- the INT MAC array must not start accumulating before
+    // a_flat_wire/b_flat_wire/sign_flat_reg are actually valid.
+    reg valid_in_d1;
+    always @(posedge clk) begin
+        if (rst) valid_in_d1 <= 1'b0;
+        else     valid_in_d1 <= valid_in;
+    end
+
     // ---------------- INT MAC Instantiation ----------------
     int_mac_512 mac_array (
         .clk(clk),
         .rst(rst),
-        .load(valid_in),
+        .load(valid_in_d1),
         .a_flat(a_flat_wire),
         .b_flat(b_flat_wire),
         .sign_flat(sign_flat_reg),   // per-lane product sign

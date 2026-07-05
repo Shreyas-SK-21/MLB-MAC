@@ -18,12 +18,12 @@ module and_popcount_4_bit(
     generate
         for(i=0; i<32; i=i+1) assign sum_L1[i] = xnn[2*i] + xnn[2*i+1];
         for(i=0; i<16; i=i+1) assign sum_L2[i] = sum_L1[2*i] + sum_L1[2*i+1];
-        for(i=0; i<8;  i=i+1) assign sum_L3[i] = sum_L2[2*i] + sum_L2[2*i+1];
-        for(i=0; i<4;  i=i+1) assign sum_L4[i] = sum_L3[2*i] + sum_L3[2*i+1];
-        for(i=0; i<2;  i=i+1) assign sum_L5[i] = sum_L4[2*i] + sum_L4[2*i+1];
+        for(i=0; i<8; i=i+1) assign sum_L3[i] = sum_L2[2*i] + sum_L2[2*i+1];
+        for(i=0; i<4; i=i+1) assign sum_L4[i] = sum_L3[2*i] + sum_L3[2*i+1];
+        for(i=0; i<2; i=i+1) assign sum_L5[i] = sum_L4[2*i] + sum_L4[2*i+1];
     endgenerate
 
-    assign final_popcount = sum_L5[0] + sum_L5[1];
+    assign final_popcount = {1'b0, sum_L5[0]} + {1'b0, sum_L5[1]};
 
     // Pipeline Logic
     reg cycle_cnt;

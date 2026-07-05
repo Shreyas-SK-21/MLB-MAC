@@ -117,7 +117,7 @@ task fill_random_lanes(input allow_zero);
     //   - independent per-vector BFP alignment (max exponent per vector)
     //   - subnormal (exp==0) lanes flushed to zero
     //   - sign-split accumulation: pos_sum - neg_sum
-    //   - shared_exponent = max_exp_x + max_exp_w - 14  (E4M3 bias=7)
+    //   - shared_exponent = max_exp_x + max_exp_w - 20  (E4M3 bias=7, 2x7=14, 2x hidden-bit=6)
     // ------------------------------------------------------------------
 task compute_reference(output reg signed [20:0] ref_result,
                             output reg [8:0]         ref_exponent);
@@ -339,7 +339,7 @@ task apply_and_check(input [8*40-1:0] name);
         if (fail_count == 0)
             $display("  ALL TESTS PASSED");
         else
-            $display("  *** FAILURES DETECTED — check waveform in mlb_mac_sim.vcd ***");
+            $display("  *** FAILURES DETECTED -- check waveform in mlb_mac_sim.vcd ***");
         $display("");
 
         $finish;

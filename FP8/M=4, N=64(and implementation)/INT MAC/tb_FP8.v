@@ -7,7 +7,7 @@ module tb_fp8_int_top;
     // ------------------------------------------------------------------
     reg  clk, rst, valid_in;
     reg  [511:0] fp8_activations, fp8_weights;
-    wire signed [24:0] wide_integer_sum;
+    wire signed [20:0] wide_integer_sum;
     wire signed [8:0]   shared_exponent;
 
     integer pass_count = 0;
@@ -146,7 +146,7 @@ task compute_reference(output reg signed [20:0] ref_result,
                 smx = mx >> shift_x;
                 smw = mw >> shift_w;
 
-                // Full mantissa magnitude used — no >>1 truncation
+                // Full mantissa magnitude used -- no >>1 truncation
                 // Sign applied AFTER product (XOR rule), matching new int_mac_64
                 prod = smx * smw;
                 if (sx ^ sw)
@@ -184,7 +184,7 @@ task apply_and_check(input [8*40-1:0] name);
             // 3. Stop loading (let reduction tree combinational logic settle)
             @(negedge clk);
             valid_in = 1'b0;
-
+            @(negedge clk);
             // 4. Verify results immediately (Tree adder is combinational off the acc)
             if ((wide_integer_sum !== expected_result) ||
                 (shared_exponent !== expected_exponent)) begin
@@ -292,9 +292,9 @@ task apply_and_check(input [8*40-1:0] name);
         // ---------------- Randomized cases ----------------
         for (t = 0; t < 50; t = t + 1) begin
             if (t % 3 == 0)
-                fill_random_lanes(1'b1);
+                fill_random_lanes(1'b1);  // allow zero-exponent lanes
             else
-                fill_random_lanes(1'b0);
+                fill_random_lanes(1'b0);  // normal numbers only
             apply_and_check("Random test");
         end
 
@@ -308,7 +308,7 @@ task apply_and_check(input [8*40-1:0] name);
         if (fail_count == 0)
             $display("  ALL TESTS PASSED");
         else
-            $display("  *** FAILURES DETECTED — check waveform in int_mac_sim.vcd ***");
+            $display("  *** FAILURES DETECTED -- check waveform in int_mac_sim.vcd ***");
         $display("");
 
         $finish;

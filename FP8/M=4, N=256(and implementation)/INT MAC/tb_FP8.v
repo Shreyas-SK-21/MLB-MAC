@@ -7,7 +7,7 @@ module tb_fp8_int_top;
     // ------------------------------------------------------------------
     reg  clk, rst, valid_in;
     reg  [2047:0] fp8_activations, fp8_weights;
-    wire signed [26:0] wide_integer_sum;
+    wire signed [20:0] wide_integer_sum;
     wire signed [8:0]   shared_exponent;
 
     integer pass_count = 0;
@@ -184,7 +184,7 @@ task apply_and_check(input [8*40-1:0] name);
             // 3. Stop loading (let reduction tree combinational logic settle)
             @(negedge clk);
             valid_in = 1'b0;
-
+            @(negedge clk);
             // 4. Verify results immediately (Tree adder is combinational off the acc)
             if ((wide_integer_sum !== expected_result) ||
                 (shared_exponent !== expected_exponent)) begin
