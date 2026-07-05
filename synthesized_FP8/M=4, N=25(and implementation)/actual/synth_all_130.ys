@@ -1,0 +1,16 @@
+# =======================================================================
+# 2. Synthesize FP8 INT Top (1x INT_MAC_64)
+# =======================================================================
+design -reset
+# Read all required Verilog files for the INT hierarchy
+read_verilog FP8_NATIVE_MAC_25.v
+
+hierarchy -check -top FP8_NATIVE_MAC_25
+synth -top FP8_NATIVE_MAC_25
+
+dfflibmap -liberty sky130_fd_sc_hd__tt_025C_1v80.lib
+abc -liberty sky130_fd_sc_hd__tt_025C_1v80.lib
+
+# Generate area report and save the netlist
+tee -o fp8_int_top_area.rpt stat -liberty sky130_fd_sc_hd__tt_025C_1v80.lib
+write_verilog fp8_int_synth.v
