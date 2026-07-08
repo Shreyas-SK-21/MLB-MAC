@@ -1,20 +1,11 @@
 """
 FP8-BFP MLB-MAC QAT on ResNet-20 / CIFAR-10 — Kaggle Notebook
-================================================================
 
 Self-contained script combining all modules:
   1. quantize.py  — FP8 quantization, BFP alignment, MLB-MAC dot product
   2. layers.py    — QAT layer wrappers (MLBConv2d, FP8OnlyConv2d, etc.)
   3. resnet20.py  — ResNet-20 architecture
   4. train.py     — Training pipeline (FP8 baseline + QAT sweep)
-
-INSTRUCTIONS:
-  1. Create a new Kaggle notebook
-  2. Enable GPU accelerator (Settings -> Accelerator -> GPU T4 x2)
-  3. Paste this entire file into a single code cell
-  4. Run it
-
-Expected runtime: ~1-2 hours on T4 GPU
 """
 
 import math
@@ -38,26 +29,21 @@ print(f"CUDA available: {torch.cuda.is_available()}")
 if torch.cuda.is_available():
     print(f"GPU: {torch.cuda.get_device_name(0)}")
 
-
-# ======================================================================
 # CONFIG
-# ======================================================================
 
 # Training hyperparameters
 FP8_BASELINE_EPOCHS = 30
 QAT_EPOCHS          = 20
 BATCH_SIZE          = 128
 N_VALUES            = [9, 25, 32, 64, 128, 256, 512]
-QAT_MAX_BATCHES     = 0    # 0 = full dataset on GPU (fast enough!)
-BASELINE_MAX_BATCHES = 0   # 0 = full dataset
+QAT_MAX_BATCHES     = 0    
+BASELINE_MAX_BATCHES = 0  
 
 CHECKPOINT_DIR = "./checkpoints"
 DATA_DIR       = "./data"
 RESULTS_CSV    = "./results.csv"
 
-# ======================================================================
 # PART 1: quantize.py — FP8-BFP MLB-MAC Quantization Simulation
-# ======================================================================
 
 FP8_BIAS = 7
 FP8_MAX_EXP = 15
@@ -174,9 +160,7 @@ def batched_fp8_dot_product(act_fp8, wgt_fp8):
     return act_fp8 @ wgt_fp8.t()
 
 
-# ======================================================================
 # PART 2: layers.py — QAT Layer Wrappers
-# ======================================================================
 
 def _pair(x):
     if isinstance(x, (list, tuple)):
@@ -491,9 +475,7 @@ class FP8OnlyLinear(nn.Module):
         return _FP8OnlyLinearFunction.apply(x, self.weight, self.bias)
 
 
-# ======================================================================
 # PART 3: resnet20.py — ResNet-20 for CIFAR-10
-# ======================================================================
 
 class BasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, N=64, quantize=True):
@@ -572,10 +554,7 @@ class ResNet20(nn.Module):
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-
-# ======================================================================
 # PART 4: Training Pipeline
-# ======================================================================
 
 CIFAR10_MEAN = (0.4914, 0.4822, 0.4465)
 CIFAR10_STD  = (0.2023, 0.1994, 0.2010)
@@ -681,7 +660,7 @@ def evaluate(model, loader, criterion, device, max_batches=0):
 
 def train_fp8_baseline(device, epochs, batch_size, checkpoint_dir, data_dir, max_batches=0):
     print("=" * 60)
-    print("Phase 1 -- FP8 Baseline Training (FP8 quantize, standard matmul)")
+    print("Phase 1 - FP8 Baseline Training (FP8 quantize, standard matmul)")
     print("=" * 60)
 
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -775,9 +754,7 @@ def train_qat(N, device, epochs, batch_size, checkpoint_dir, data_dir, max_batch
     return final_acc
 
 
-# ======================================================================
 # MAIN — Run everything
-# ======================================================================
 
 if __name__ == "__main__":
     device = get_device()
@@ -788,7 +765,7 @@ if __name__ == "__main__":
           f"{'full dataset' if QAT_MAX_BATCHES == 0 else f'{QAT_MAX_BATCHES} batches/epoch'}")
     print()
 
-    # -- Phase 1: FP8 Baseline --
+    #Phase 1: FP8 Baseline
     fp8_acc = train_fp8_baseline(
         device=device,
         epochs=FP8_BASELINE_EPOCHS,
@@ -798,7 +775,7 @@ if __name__ == "__main__":
         max_batches=BASELINE_MAX_BATCHES,
     )
 
-    # -- Phase 2: QAT Sweep --
+    #Phase 2: QAT Sweep
     results = [("fp8_baseline", fp8_acc)]
 
     for N in N_VALUES:
@@ -819,14 +796,14 @@ if __name__ == "__main__":
             traceback.print_exc()
             results.append((str(N), -1.0))
 
-    # -- Write results.csv --
+    #Write results.csv
     with open(RESULTS_CSV, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["N", "test_top1_accuracy"])
         for n_str, acc in results:
             writer.writerow([n_str, f"{acc:.2f}"])
 
-    # -- Print summary table --
+    #Print summary table
     print("\n" + "=" * 50)
     print("  Results Summary")
     print("=" * 50)
@@ -841,7 +818,6 @@ if __name__ == "__main__":
     print("=" * 50)
     print(f"\nResults saved to {RESULTS_CSV}")
 
-    # -- Commentary --
     print("\nCommentary on accuracy vs N:")
     print("-" * 50)
     qat_results = [(n, a) for n, a in results if n != "fp8_baseline" and a >= 0]
