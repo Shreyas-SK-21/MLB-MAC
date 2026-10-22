@@ -1,0 +1,8 @@
+design -reset
+read_verilog FP8_NATIVE_MAC_64.v
+hierarchy -check -top FP8_NATIVE_MAC_64
+synth -top FP8_NATIVE_MAC_64
+dfflibmap -liberty sky130_fd_sc_hd__tt_025C_1v80.lib
+abc -liberty sky130_fd_sc_hd__tt_025C_1v80.lib
+tee -o fp8_native_mac_area.rpt stat -liberty sky130_fd_sc_hd__tt_025C_1v80.lib
+write_verilog fp8_native_mac_synth.v

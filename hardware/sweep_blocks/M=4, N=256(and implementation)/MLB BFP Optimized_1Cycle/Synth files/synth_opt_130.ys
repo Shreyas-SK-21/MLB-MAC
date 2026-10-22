@@ -1,0 +1,11 @@
+read_verilog "../Verilog codes/FP8_corrected.v"
+read_verilog "../Verilog codes/bpf_aligner.v"
+
+synth -top fp8_mlb_top_corrected
+
+dfflibmap -liberty "/mnt/c/Users/shrey/Desktop/Projects/MLB-MAC/FP8_Corrected/AND_Popcount/Synth files/sky130_fd_sc_hd__tt_025C_1v80.lib"
+abc -liberty "/mnt/c/Users/shrey/Desktop/Projects/MLB-MAC/FP8_Corrected/AND_Popcount/Synth files/sky130_fd_sc_hd__tt_025C_1v80.lib"
+opt_clean
+
+tee -o fp8_mlb_opt_area.rpt stat -liberty "/mnt/c/Users/shrey/Desktop/Projects/MLB-MAC/FP8_Corrected/AND_Popcount/Synth files/sky130_fd_sc_hd__tt_025C_1v80.lib"
+write_verilog fp8_mlb_opt_synth.v

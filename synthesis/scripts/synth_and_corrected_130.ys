@@ -1,0 +1,29 @@
+# synth_and_corrected_130.ys
+# Yosys synthesis script for fp8_mlb_top_corrected (AND-Popcount, 1-cycle II)
+# Flow: synth -> dfflibmap -> abc -liberty -> stat -liberty
+#
+# This is the CORRECTED design that addresses the 2-cycle IPS/W calculation
+# error.  Compare its area report against the original fp8_mlb_top (FP8.v)
+# to measure the cost of the throughput fix:
+#
+#   Expected area increase: ~16-25% at N=64 (one extra MLB_4 instance)
+#   Throughput gain        : 2x  (II: 2 cycles -> 1 cycle)
+#   Net IPS/W change       : Area up ~20%, throughput up 2x => IPS/W ~ +67%
+#
+# Run from this directory with:
+#   yosys synth_and_corrected_130.ys
+
+design -reset
+
+# Read all required Verilog files for the corrected MLB hierarchy
+read_verilog bpf_aligner.v and_popcount_4_bit.v MLB_MAC_unit.v MLB_MAC_4_bit.v FP8_corrected.v
+
+hierarchy -check -top fp8_mlb_top_corrected
+synth -top fp8_mlb_top_corrected
+
+dfflibmap -liberty sky130_fd_sc_hd__tt_025C_1v80.lib
+abc -liberty sky130_fd_sc_hd__tt_025C_1v80.lib
+
+# Generate area report and save synthesised netlist
+tee -o fp8_mlb_corrected_area.rpt stat -liberty sky130_fd_sc_hd__tt_025C_1v80.lib
+write_verilog fp8_mlb_corrected_synth.v

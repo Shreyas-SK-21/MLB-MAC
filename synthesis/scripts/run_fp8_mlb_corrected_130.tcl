@@ -1,0 +1,47 @@
+# run_fp8_mlb_corrected_130.tcl
+# OpenSTA timing and power analysis for fp8_mlb_top_corrected (AND-Popcount, 1-cycle II)
+
+set start_time [clock milliseconds]
+
+set DESIGN_NAME "fp8_mlb_top_corrected"
+set TECH_LEF "sky130_fd_sc_hd.tlef"
+set CELL_LEF "sky130_fd_sc_hd_merged.lef"
+
+set LIB_FILE "sky130_fd_sc_hd__tt_025C_1v80.lib"
+set NETLIST_FILE "fp8_mlb_corrected_synth.v"
+
+read_lef $TECH_LEF
+read_lef $CELL_LEF
+
+read_liberty $LIB_FILE
+read_verilog $NETLIST_FILE
+
+link_design $DESIGN_NAME
+create_clock -name clk -period 25.0 [get_ports clk]
+set_input_delay  -clock clk 1.0 [all_inputs]
+set_output_delay -clock clk 1.0 [all_outputs]
+set_max_fanout 16 [current_design]
+set_max_transition 0.5 [current_design]
+report_check_types -max_fanout -max_capacitance -violators
+repair_design -max_wire_length 200
+
+# Theoretical 50% toggle rate across all nets
+set_power_activity -global -activity 0.5
+
+puts "\n========================================"
+puts " AREA REPORT: $DESIGN_NAME"
+puts "========================================"
+report_design_area
+
+puts "\n========================================"
+puts " POWER REPORT: $DESIGN_NAME"
+puts "========================================"
+report_power
+
+puts "\n========================================"
+puts " TIMING & LATENCY REPORT: $DESIGN_NAME"
+puts "========================================"
+report_checks -path_delay max -format full_clock_expanded
+report_checks -path_delay max -digits 4 -fields {slew cap} -unconstrained
+
+exit

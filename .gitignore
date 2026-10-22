@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Caches and environments
+.pytest_cache/
+.ipynb_checkpoints/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# EDA, Libraries and Heavy Simulation artifacts
+*.vcd
+*.vvp
+*.sim
+sim_opt
+*.lib
+*.lef
+*_synth.v
+*.rpt
+output
+sim
+sim_*
+
+# OS metadata
+.DS_Store
+Thumbs.db
