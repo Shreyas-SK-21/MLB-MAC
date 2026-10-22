@@ -282,15 +282,3 @@ python train_experiments.py --mode fp32 --epochs 50 --seed 42
 Alternatively, open `qat/run_kaggle_colab.ipynb` in Google Colab or Kaggle to run training on cloud GPUs.
 
 ---
-
-## License & Attribution
-This project is open-source under the MIT License. If you use or build upon this architecture in your research, please cite:
-
-```bibtex
-@inproceedings{kulkarni2026andpopcount,
-  author    = {Shreyas S. Kulkarni and Heer and Madhav Rao},
-  title     = {AND-Popcount MLB-MAC: An Energy-Efficient FP8 Dot-Product Unit for DNN Inference},
-  booktitle = {IEEE International Symposium on Circuits and Systems (ISCAS)},
-  year      = {2027}
-}
-```
